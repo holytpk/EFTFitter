@@ -12,7 +12,7 @@ int main() {
   EFT eft("data", 1., EFT::Fit::absolute, EFT::Stat::xsec);
   const std::string inDir = "./example_fit_root/", outDir = "./example_fit_output/";
   const std::string hName = "TTbarSpinDensityMatrix/snake_spinCorr", sName = "TTbarSpinDensityMatrix/sumWgt_noCut";
-  const std::string sufDat = "_unfolded_data", sufSim = "_part_cut_0";
+  const std::string sufDat = "_unfolded_data", sufSim = "_part_cut_2";
   const int nRebin = 5;
   const double k_nnlo_lo = 22. * 1.667296656, br_tt_2l = 0.041062412; // NNLO/LO k-factor
 
