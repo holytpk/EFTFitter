@@ -1,0 +1,15 @@
+EFTFitter framework to perform chi2 tests on EFT templates
+
+Requirements
+- C++14 compiler
+- ROOT6
+- development and production were done under gcc 6.2.0 and ROOT 6.12/04 and 6.14/00
+
+Notes
+- execution is based on putting together an execution macro and compiling it with the source
+- file exec/example_fit.cc is provided showing how such an execution macro looks like
+- file exec/execMacro.sh is provided to ease compiling and running the macro
+- more details in exec/example_fit.cc
+
+Feedback and/or bug report are welcome
+Initial commit 31/08/2018
