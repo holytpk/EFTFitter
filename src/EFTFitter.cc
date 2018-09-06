@@ -248,7 +248,7 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
     FitUtil::axisPlot(m_hist.at({key, samp}), 
                       histMin, histMax, yLabel, 0.059, 0.73, 0.047, 0., 0., xLabel, 0.037, 1.15, 0.033);
     FitUtil::axisPlot(m_ratio.at({key, samp}), 
-                      ratioMin, ratioMax, "MC / " + ldat, 0.101, 0.51, 0.093, 0., 0., xLabel, 0.151, 0.57, 0.107);
+                      ratioMin, ratioMax, "MC / " + ldat, 0.121, 0.41, 0.093, 0., 0., xLabel, 0.131, 0.71, 0.107);
   }
 
   // ok, now let's get to drawing...
@@ -368,8 +368,10 @@ void EFTFitter::autoCovMatRate(const double rateUnc)
   // make the rate matrix with requested rate uncertainty parameter
   TMatrixD tmpMat(nBin - 2, nBin - 2);
   for (int iR = 2; iR < nBin; ++iR ) {
-    for (int iC = 2; iC < nBin; ++iC )
-      tmpMat(iR - 2, iC - 2) = (fitMode == Fit::absolute and iC == iR) ? std::pow(rateUnc * integral * v_binC.at(iR).at(0), 2.) : 0.;
+    for (int iC = 2; iC < nBin; ++iC ) {
+      tmpMat(iR - 2, iC - 2) = (fitMode == Fit::absolute) ? 
+        std::pow(rateUnc * integral, 2.) * v_binC.at(iR).at(0) * v_binC.at(iC).at(0) : 0.;
+    }
   }
 
   m_covMat.insert({"rateErr", tmpMat});
@@ -804,7 +806,7 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
   }
 
   // declare here things that are gonna be applicable for all anyway
-  const std::array<std::string, 2> a_sampLeg = {" (all)", " (lin)"};
+  const std::array<std::string, 2> a_sampLeg = {" (all)", " (linear)"};
   const std::array<int, 2> a_sampStyL = {2, 4};
   const std::array<double, 2> a_zero = {0., 0.};
   const std::array<double, 2> a_vPnt = {0., 8.};
@@ -892,17 +894,17 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
       // also prepare the stuff for 2 and 1 sigma bands (first sample type only)
       if (samp == v_sample.front()) {
-        const auto iBegin = std::begin(av_dChi2.at(iSamp));
+        const auto itBegin = std::begin(av_dChi2.at(iSamp));
 
         // assume there's only 1 minima, we want the pair of elements just past +-1 boundary
-        const auto i1SigD = std::find_if(iBegin, std::end(av_dChi2.at(iSamp)), 
-                                         [] (const double &dChi2) {return dChi2 < 1.;});
+        const auto it1SigD = std::find_if(itBegin, std::end(av_dChi2.at(iSamp)), 
+                                          [] (const double &dChi2) {return dChi2 < 1.;});
 
-        const auto i1SigU = std::find_if(std::next(i1SigD), std::end(av_dChi2.at(iSamp)), 
-                                         [] (const double &dChi2) {return dChi2 > 1.;});
+        const auto it1SigU = std::find_if(std::next(it1SigD), std::end(av_dChi2.at(iSamp)), 
+                                          [] (const double &dChi2) {return dChi2 > 1.;});
 
         // check that the search returns sensible things given the assumption
-        if (i1SigD == iBegin or i1SigD == std::end(av_dChi2.at(iSamp)) or i1SigU == std::end(av_dChi2.at(iSamp))) {
+        if (it1SigD == itBegin or it1SigD == std::end(av_dChi2.at(iSamp)) or it1SigU == std::end(av_dChi2.at(iSamp))) {
           std::cout << "Requested fit range for operator " << opName << 
             " is insufficient to define the 1 sigma bands! Skipping..." << std::endl;
           drawSig1 = false;
@@ -910,13 +912,13 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
         }
 
         // same thing for 2 sigma, with a different threshold
-        const auto i2SigD = std::find_if(iBegin, std::end(av_dChi2.at(iSamp)), 
-                                         [] (const double &dChi2) {return dChi2 < 4.;});
+        const auto it2SigD = std::find_if(itBegin, std::end(av_dChi2.at(iSamp)), 
+                                          [] (const double &dChi2) {return dChi2 < 4.;});
 
-        const auto i2SigU = std::find_if(std::next(i2SigD), std::end(av_dChi2.at(iSamp)), 
-                                         [] (const double &dChi2) {return dChi2 > 4.;});
+        const auto it2SigU = std::find_if(std::next(it2SigD), std::end(av_dChi2.at(iSamp)), 
+                                          [] (const double &dChi2) {return dChi2 > 4.;});
 
-        if (i2SigD == iBegin or i2SigD == std::end(av_dChi2.at(iSamp)) or i2SigU == std::end(av_dChi2.at(iSamp))) {
+        if (it2SigD == itBegin or it2SigD == std::end(av_dChi2.at(iSamp)) or it2SigU == std::end(av_dChi2.at(iSamp))) {
           std::cout << "Requested fit range for operator " << opName << 
             " is insufficient to define the 2 sigma bands! Skipping..." << std::endl;
           drawSig2 = false;
@@ -925,10 +927,15 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
         // ok we've got the iterators, now get the actual errors - 2D, 2U, 1D, 1U
         // in case of down, element previous to the first less than 1 is gonna be last largest than 1
         // thus the -1 in getting the index (doing it in find_if invalidates the checks)
-        const double err1SigD = std::abs(opMin - av_opVal.at(iSamp).at( std::distance(iBegin, i1SigD) - 1 ));
-        const double err1SigU = std::abs(av_opVal.at(iSamp).at( std::distance(iBegin, i1SigU) ) - opMin);
-        const double err2SigD = (drawSig2) ? std::abs(opMin - av_opVal.at(iSamp).at( std::distance(iBegin, i2SigD) - 1 )) : 0.;
-        const double err2SigU = (drawSig2) ? std::abs(av_opVal.at(iSamp).at( std::distance(iBegin, i2SigU) ) - opMin) : 0.;
+        const int i1SigD = std::distance(itBegin, it1SigD) - 1;
+        const int i1SigU = std::distance(itBegin, it1SigU);
+        const int i2SigD = std::distance(itBegin, it2SigD) - 1;
+        const int i2SigU = std::distance(itBegin, it2SigU);
+
+        const double err1SigD = std::abs(opMin - av_opVal.at(iSamp).at(i1SigD));
+        const double err1SigU = std::abs(av_opVal.at(iSamp).at(i1SigU) - opMin);
+        const double err2SigD = (drawSig2) ? std::abs(opMin - av_opVal.at(iSamp).at(i2SigD)) : 0.;
+        const double err2SigU = (drawSig2) ? std::abs(av_opVal.at(iSamp).at(i2SigU) - opMin) : 0.;
 
         // make the needed vectors for the points of the band graphs - zeros, verticals and such
         const std::array<double, 2> a_opMin = {opMin, opMin};
@@ -942,10 +949,10 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
           err2SigU << " - " << err2SigD << " (2 sigma)" << std::endl;
 
         std::cout << "Best fit dChi2 "<< opName << ", sample " << samp << ": 0 + " << 
-          av_dChi2.at(iSamp).at(std::distance(iBegin, i1SigU)) <<
-          " - " << av_dChi2.at(iSamp).at(std::distance(iBegin, i1SigD)) << " (1 sigma) + " << 
-          av_dChi2.at(iSamp).at(std::distance(iBegin, i2SigU)) << " - " << 
-          av_dChi2.at(iSamp).at(std::distance(iBegin, i2SigD)) << " (2 sigma)" << std::endl;
+          av_dChi2.at(iSamp).at(i1SigU) <<
+          " - " << av_dChi2.at(iSamp).at(i1SigD) << " (1 sigma) + " << 
+          av_dChi2.at(iSamp).at(i2SigU) << " - " << 
+          av_dChi2.at(iSamp).at(i2SigD) << " (2 sigma)" << std::endl;
 
         // guiding line graph
         ag_sigma.at(0) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
@@ -1087,10 +1094,10 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
   const std::array<int, 2> a_sampCol0 = {kPink - 1, kAzure - 1};
   const std::array<int, 2> a_sampCol1 = {kGreen + 1, kYellow + 1};
   const std::array<int, 2> a_sampCol2 = {kOrange, kTeal};
-  const std::array<int, 2> a_sampStyF = {0, 0};
+  const std::array<int, 2> a_sampStyF = {1001, 1001}; // 0 means no fill, 1001 means full fill
   const std::array<int, 2> a_sampStyL = {1, 4};
   const std::array<int, 2> a_sampStyM = {kFullCrossX, kOpenCrossX};
-  const std::array<std::string, 2> a_sampOpt = {"l", "l"};
+  const std::array<std::string, 2> a_sampOpt = {"lf", "lf"};
   const std::array<double, 2> a_zero = {0., 0.};
 
   // for the sorting of points in op1 - op2 space - distance calculator
@@ -1282,7 +1289,7 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       }
 
       ag_sigma1.at(iSamp) = std::make_unique<TGraph>(v_op1Sig1.size(), v_op2Sig1.data(), v_op1Sig1.data());
-      FitUtil::stylePlot(ag_sigma1.at(iSamp), a_sampCol1.at(iSamp), 1., a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
+      FitUtil::stylePlot(ag_sigma1.at(iSamp), a_sampCol1.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
       FitUtil::axisPlot(ag_sigma1.at(iSamp), 
                         op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
                         op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
@@ -1290,7 +1297,7 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       ag_sigma1.at(iSamp)->SetTitle("");
 
       ag_sigma2.at(iSamp) = std::make_unique<TGraph>(v_op1Sig2.size(), v_op2Sig2.data(), v_op1Sig2.data());
-      FitUtil::stylePlot(ag_sigma2.at(iSamp), a_sampCol2.at(iSamp), 1., a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
+      FitUtil::stylePlot(ag_sigma2.at(iSamp), a_sampCol2.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
       FitUtil::axisPlot(ag_sigma2.at(iSamp), 
                         op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
                         op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
@@ -1717,6 +1724,9 @@ void FitUtil::setH1Style()
   // always reset everything first
   gStyle->Reset();
   gROOT->SetStyle("Plain");
+
+  // if color alpha is needed (some install may not have this by default)
+  gStyle->SetCanvasPreferGL(true);
 
   gStyle->SetFrameBorderMode(0);
   gStyle->SetCanvasBorderMode(0);

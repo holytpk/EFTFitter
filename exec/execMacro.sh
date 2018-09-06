@@ -30,12 +30,12 @@ if [ $(echo "${rooVer%%/*} < 6.00" | bc -l) -eq 1 ]; then
 fi
 
 ## ok, do stuff
-eftSrc="WHERE/THE/EFTFITTER/SRC/DIR/IS"
+eftSrc="/nfs/dust/cms/user/afiqaize/cms/rand/eftRivet_290118/EFTFitter/src/"
 txtMacro=$(readlink -f ${1})
 exeMacro=${txtMacro%.*}
 
 ## set the compiler options to be used
-compileOpt=(`root-config --cflags --glibs`)
+compileOpt=(`root-config --cflags --evelibs`)
 compileOpt+=(-std=c++14 -O3 -Wall -Wextra -Wpedantic -Werror)
 
 ## eh these are fine
