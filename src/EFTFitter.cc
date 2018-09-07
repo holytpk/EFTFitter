@@ -282,6 +282,11 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
   if (drawLogY) pad1->SetLogy();
 
   m_hist.at({dataName, Sample::all})->Draw("axis");
+  leg->Draw();
+  txt.DrawLatexNDC(0.121, 0.913, topLeft.c_str());
+  txt.DrawLatexNDC(0.451, 0.913, topMid.c_str());
+  txt.DrawLatexNDC(0.691, 0.913, topRight.c_str());
+
   for (const auto &hist : m_hist) {
     if (hist.first.first == dataName) continue;
 
@@ -289,10 +294,6 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
   }
   m_hist.at({dataName, Sample::all})->Draw("p e x0 same");
 
-  leg->Draw();
-  txt.DrawLatexNDC(0.121, 0.913, topLeft.c_str());
-  txt.DrawLatexNDC(0.451, 0.913, topMid.c_str());
-  txt.DrawLatexNDC(0.691, 0.913, topRight.c_str());
   pad1->RedrawAxis();
 
   can->cd();
@@ -1018,6 +1019,11 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
     FitUtil::putLegend(leg, 0.685, 0.945, 0.155, 0.435); // bottom right
 
     ag_dChi2.at(static_cast<int>(v_sample.front()))->Draw("a c");
+    leg->Draw();
+    txt.DrawLatexNDC(0.131, 0.923, topLeft.c_str());
+    txt.DrawLatexNDC(0.461, 0.923, topMid.c_str());
+    txt.DrawLatexNDC(0.671, 0.923, topRight.c_str());
+
     if (drawSig1) {
       if (drawSig2)
         ag_sigma.at(2)->Draw("2");
@@ -1030,11 +1036,6 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       if (g_dChi2 == nullptr) continue;
       g_dChi2->Draw("c");
     }
-
-    leg->Draw();
-    txt.DrawLatexNDC(0.131, 0.923, topLeft.c_str());
-    txt.DrawLatexNDC(0.461, 0.923, topMid.c_str());
-    txt.DrawLatexNDC(0.671, 0.923, topRight.c_str());
 
     can->RedrawAxis();
     can->SaveAs((dirName + opName + "_" + toStr(v_sample.front()) + "_dChi2.pdf").c_str());
@@ -1346,6 +1347,11 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
     FitUtil::putLegend(leg, 0.685, 0.945, 0.155, 0.335); // bottom right
 
     ag_sigma0.at(static_cast<int>(v_sample.front()))->Draw("a p");
+    leg->Draw();
+    txt.DrawLatexNDC(0.131, 0.923, topLeft.c_str());
+    txt.DrawLatexNDC(0.461, 0.923, topMid.c_str());
+    txt.DrawLatexNDC(0.671, 0.923, topRight.c_str());
+
     ag_zero.at(0)->Draw("l");
     ag_zero.at(1)->Draw("l");
 
@@ -1362,11 +1368,6 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       if (g_sigma0 == nullptr) continue;
       g_sigma0->Draw("p");
     }
-
-    leg->Draw();
-    txt.DrawLatexNDC(0.131, 0.923, topLeft.c_str());
-    txt.DrawLatexNDC(0.461, 0.923, topMid.c_str());
-    txt.DrawLatexNDC(0.671, 0.923, topRight.c_str());
 
     can->RedrawAxis();
     can->SaveAs((dirName + op1Name + "_" + op2Name + "_" + toStr(v_sample.front()) + "_dChi2.pdf").c_str());
@@ -1865,11 +1866,13 @@ void FitUtil::axisPlot(const std::unique_ptr<Plot> &plot,
   plot->GetYaxis()->SetTitleSize(ySiz);
   plot->GetYaxis()->SetTitleOffset(yOff);
   plot->GetYaxis()->SetLabelSize(yLab);
+  plot->GetYaxis()->SetNdivisions(507);
 
   plot->GetXaxis()->SetTitle(xTxt.c_str());
   plot->GetXaxis()->SetTitleSize(xSiz);
   plot->GetXaxis()->SetTitleOffset(xOff);
   plot->GetXaxis()->SetLabelSize(xLab);
+  plot->GetXaxis()->SetNdivisions(507);
 }
 
 

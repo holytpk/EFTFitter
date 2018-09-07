@@ -11,5 +11,12 @@ Notes
 - file exec/execMacro.sh is provided to ease compiling and running the macro
 - more details in exec/example_fit.cc
 
+To-do (in no particular order)
+- a way to inject styling commands from exec macro
+- generally more flexible workflow
+- saving of computed chi2 into trees
+- address the must view canvas or plots in saved root file wont show properly bug
+
 Feedback and/or bug report are welcome
-Updated 06/09/2018
+Updated	07/09/2018
+
