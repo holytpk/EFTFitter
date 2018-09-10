@@ -11,12 +11,12 @@
 
 // ctors
 EFTFitter::EFTFitter(const std::string &dataName_, const double eftLambda_, 
-                     const Fit fitMode_, const Stat statMode_, const double statSum_) :
+                     const Fit fitMode_, const Stat statMode_, const double shapeSum_) :
   dataName(dataName_),
   eftLambda(eftLambda_),
   fitMode(fitMode_),
   statMode(statMode_),
-  statSum(statSum_),
+  shapeSum(shapeSum_),
   hasData(false)
 {
   if (fitMode != Fit::absolute and fitMode != Fit::shape)
@@ -740,7 +740,10 @@ void EFTFitter::computeFitChi2(const std::map<std::string, std::vector<double>> 
   if (extractKey(m_opGrid) != v_opName)
     throw std::logic_error( "Requested operator set for interpolation is not consistent with available input!!" );
 
+  // may be large, so reserve the space beforehand
   std::vector<std::string> v_keyToFit;
+  v_keyToFit.reserve( std::accumulate(std::begin(m_opGrid), std::end(m_opGrid), 1, 
+                                      [] (int nKey, const auto &p) {return nKey * p.second.size();}) );
   unpackOpGrid(v_keyToFit, m_opGrid, std::begin(m_opGrid), "");
   v_keyToFit.shrink_to_fit();
   std::sort(std::begin(v_keyToFit), std::end(v_keyToFit));
@@ -751,7 +754,7 @@ void EFTFitter::computeFitChi2(const std::map<std::string, std::vector<double>> 
 
   const std::vector<std::array<double, 2>> &dataContent = m_binContent.at( {dataName, Sample::all} );
   const int nBin = dataContent.size();
-  const double dataInt = (fitMode == Fit::shape) ? statSum : (statMode == Stat::xsec) ? dataContent.at(0).at(0) : dataContent.at(1).at(0);
+  const double dataInt = (fitMode == Fit::shape) ? shapeSum : (statMode == Stat::xsec) ? dataContent.at(0).at(0) : dataContent.at(1).at(0);
 
   // ok here we copy and invert the matrix because this is what we actually use
   TMatrixD invMat = m_covMat.at("finalCov");
@@ -762,7 +765,7 @@ void EFTFitter::computeFitChi2(const std::map<std::string, std::vector<double>> 
       const std::vector<std::array<double, 2>> opContent = (m_binContent.count({key, samp}) == 0) ? 
         interpolateOpValue(key, samp) : m_binContent.at({key, samp});
 
-      const double opInt = (fitMode == Fit::shape) ? statSum : (statMode == Stat::xsec) ? opContent.at(0).at(0) : opContent.at(1).at(0);
+      const double opInt = (fitMode == Fit::shape) ? shapeSum : (statMode == Stat::xsec) ? opContent.at(0).at(0) : opContent.at(1).at(0);
       double fitChi2 = 0.;
       for (int iR = 2; iR < nBin; ++iR) {
         for (int iC = 2; iC < nBin; ++iC) {
@@ -1431,7 +1434,7 @@ void EFTFitter::autoCovMatStatBin()
   }
 
   const std::vector<std::array<double, 2>> &dataC = m_binContent.at({dataName, Sample::all});
-  const double integral = (fitMode == Fit::shape) ? statSum : (statMode == Stat::xsec) ? dataC.at(0).at(0) : dataC.at(1).at(0);
+  const double integral = (fitMode == Fit::shape) ? shapeSum : (statMode == Stat::xsec) ? dataC.at(0).at(0) : dataC.at(1).at(0);
   const int nBin = dataC.size();
 
   TMatrixD tmpMat(nBin - 2, nBin - 2);
@@ -1696,7 +1699,7 @@ std::unique_ptr<TH1D> EFTFitter::convertContentToHist(const std::string &keyName
   const int nBin = v_rawBin.size() - 1;
   auto hist = std::make_unique<TH1D>((keyName + "_" + toStr(sampleType)).c_str(), "", nBin, v_rawBin.data());
 
-  const double integral = (fitMode == Fit::shape) ? statSum : (statMode == Stat::xsec) ? v_binC.at(0).at(0) : v_binC.at(1).at(0);
+  const double integral = (fitMode == Fit::shape) ? shapeSum : (statMode == Stat::xsec) ? v_binC.at(0).at(0) : v_binC.at(1).at(0);
   for (int iB = 1; iB <= nBin; ++iB) {
     // a scaled histogram just have every bin content, error scaled down by a factor
     // so we simply have to unscale it back

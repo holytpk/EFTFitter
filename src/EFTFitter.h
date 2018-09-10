@@ -53,7 +53,7 @@ class EFTFitter {
 
   /// constructors
   EFTFitter(const std::string &dataName_, const double eftLambda_ = 1., 
-            const Fit fitMode_ = Fit::absolute, const Stat statMode_ = Stat::xsec, const double statSum_ = 1.);
+            const Fit fitMode_ = Fit::absolute, const Stat statMode_ = Stat::xsec, const double shapeSum_ = 1.);
 
   // what kind of sample we're working with
   enum class Sample : int {
@@ -167,8 +167,8 @@ class EFTFitter {
   /// what statistic to report: xsec vs count
   Stat statMode;
 
-  /// what should the templates sum up to in case of shape comparison (if no bin width division, of course)
-  double statSum;
+  /// what should the templates sum up to in case of shape comparison
+  double shapeSum;
 
   bool hasData;
 
