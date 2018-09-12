@@ -19,9 +19,12 @@ EFTFitter::EFTFitter(const std::string &dataName_, const double eftLambda_,
   shapeSum(shapeSum_),
   hasData(false)
 {
-  if (fitMode != Fit::absolute and fitMode != Fit::shape)
-    throw std::invalid_argument( "Invalid fit mode: which fit mode to perform, must be (from namespace EFTFitter)"
-                                 " 'Fit::absolute' (counts/xsec as-is) or 'Fit::shape' (shape ie event fraction)" );
+  if (fitMode != Fit::absolute and fitMode != Fit::shape and fitMode != Fit::hybrid)
+    throw std::invalid_argument( "Invalid fit mode: which fit mode to perform, must be (from namespace EFTFitter) "
+                                 "'Fit::absolute' (count/xsec as-is within the template), 'Fit::shape' (shape ie event fraction) " 
+                                 "or 'Fit::hybrid' (separately fit on count/xsec and then shape)\n" 
+                                 "Note: 'Fit::hybrid' ignores the integral of all templates given to addRawInput(). " 
+                                 "The integral is set to the value passed as arg normalizedSum (can be count/xsec based on arg sumStat)" );
 
   if (statMode != Stat::count and statMode != Stat::xsec)
     throw std::invalid_argument( "Invalid event mode: how to count the events, must be (from namespace EFTFitter)"
@@ -32,9 +35,9 @@ EFTFitter::EFTFitter(const std::string &dataName_, const double eftLambda_,
 }
 
 
-void EFTFitter::addRawInput(const std::string &keyName, const Sample &sampleType, 
+void EFTFitter::addRawInput(const std::string &keyName, const Sample sampleType, 
                             const std::string &fileName, const std::string &histName, const std::string &sumName,
-                            const int nRebin, const double xsec, const Stat &statIntegral, const bool addIfPresent) 
+                            const int nRebin, const std::array<double, 2> &normalizedSum, const Stat sumStat, const bool addIfPresent) 
 {
   if (!checkOpSet(keyName, sampleType))
     throw std::logic_error( "Added key " + keyName + " :: " + toStr(sampleType) + " is not consistent with available input!!" );
@@ -71,7 +74,8 @@ void EFTFitter::addRawInput(const std::string &keyName, const Sample &sampleType
   std::unique_ptr<TH1D> sumHist(nullptr);
 
   // perform the manipulations needed
-  if (xsec != 0. and statIntegral == Stat::count) {
+  const double xsec = normalizedSum.at(0);
+  if (fitMode != Fit::hybrid and xsec != 0. and sumStat == Stat::count) {
     sumHist = std::unique_ptr<TH1D>(dynamic_cast<TH1D *>(( (file->Get( sumName.c_str() ))->Clone() )));
     hist->Scale( intLumi * (xsec / sumHist->GetBinContent(1)) );
   }
@@ -98,19 +102,38 @@ void EFTFitter::addRawInput(const std::string &keyName, const Sample &sampleType
   hsum = hist->IntegralAndError(-1, -1, herr, ""); // "" to get the sum(content), while "width" to get sum(content * width) 
   hist->Scale( 1. / hist->Integral() );
 
-  // get the stat error of xsec - keep relative stat unc of integral
-  const double xerr = xsec * (herr / hsum);
-
   // make the initial content vector - first is xsec, second count
-  std::vector<std::array<double, 2>> v_binContent = { {xsec, xerr}, {hsum, herr} };
-  if (statIntegral == Stat::count) {
-    if (xsec != 0.)
-      v_binContent = { {xsec, xerr}, {hsum, herr} };
-    else 
-      v_binContent = { {hsum / intLumi, herr / intLumi}, {hsum, herr} };
+  std::vector<std::array<double, 2>> v_binContent;
+  if (fitMode != Fit::hybrid) {
+    if (sumStat == Stat::count) {
+      if (xsec != 0.) {
+        // get the stat error of xsec - keep relative stat unc of integral
+        const double xerr = xsec * (herr / hsum);
+
+        v_binContent = { {xsec, xerr}, {hsum, herr} };
+      }
+      else 
+        v_binContent = { {hsum / intLumi, herr / intLumi}, {hsum, herr} };
+    }
+    else if (sumStat == Stat::xsec)
+      v_binContent = { {hsum, herr}, {hsum * intLumi, herr * intLumi} };
   }
-  else if (statIntegral == Stat::xsec)
-    v_binContent = { {hsum, herr}, {hsum * intLumi, herr * intLumi} };
+  else {
+    if (sumStat == Stat::count) {
+      const double xerr = (normalizedSum.at(1) > 0.) ? normalizedSum.at(1) : std::sqrt(xsec);
+
+      v_binContent = { {xsec / intLumi, xerr / intLumi}, {xsec, xerr} };
+    }
+    else if (sumStat == Stat::xsec) {
+      const double xerr = (normalizedSum.at(1) > 0.) ? normalizedSum.at(1) : -1.;
+
+      if (xerr < 0.)
+        throw std::invalid_argument( "Invalid error of normalizedSum not allowed when using fit mode Fit::hybrid "
+                                     "together with sumStat Stat::xsec; please assign a valid error!!");
+
+      v_binContent = { {xsec, xerr}, {xsec * intLumi, xerr * intLumi} };
+    }
+  }
 
   const std::vector<std::array<double, 2>> v_binNorm = FitUtil::extractContentError(hist);
   v_binContent.insert(std::end(v_binContent), std::begin(v_binNorm), std::end(v_binNorm));
@@ -578,7 +601,7 @@ void EFTFitter::prepareInterpolationBase()
 
   // these are gonna pop up often
   const int nBin = std::begin(m_interInput)->second.size();
-  const int iXs = 1; // (statMode == Stat::xsec) ? 0 : 1; // always do interpolation with raw count
+  const int iXs = (statMode == Stat::xsec) ? 0 : 1;
   const double sqLambda = std::pow(eftLambda, 2.), quLambda = std::pow(eftLambda, 4.);
 
   // ok let's start interpolating - first prepare the bin contents starting from SM
@@ -754,7 +777,7 @@ void EFTFitter::computeFitChi2(const std::map<std::string, std::vector<double>> 
 
   const std::vector<std::array<double, 2>> &dataContent = m_binContent.at( {dataName, Sample::all} );
   const int nBin = dataContent.size();
-  const double dataInt = (fitMode == Fit::shape) ? shapeSum : (statMode == Stat::xsec) ? dataContent.at(0).at(0) : dataContent.at(1).at(0);
+  const double dataInt = (fitMode != Fit::absolute) ? shapeSum : (statMode == Stat::xsec) ? dataContent.at(0).at(0) : dataContent.at(1).at(0);
 
   // ok here we copy and invert the matrix because this is what we actually use
   TMatrixD invMat = m_covMat.at("finalCov");
@@ -765,7 +788,7 @@ void EFTFitter::computeFitChi2(const std::map<std::string, std::vector<double>> 
       const std::vector<std::array<double, 2>> opContent = (m_binContent.count({key, samp}) == 0) ? 
         interpolateOpValue(key, samp) : m_binContent.at({key, samp});
 
-      const double opInt = (fitMode == Fit::shape) ? shapeSum : (statMode == Stat::xsec) ? opContent.at(0).at(0) : opContent.at(1).at(0);
+      const double opInt = (fitMode != Fit::absolute) ? shapeSum : (statMode == Stat::xsec) ? opContent.at(0).at(0) : opContent.at(1).at(0);
       double fitChi2 = 0.;
       for (int iR = 2; iR < nBin; ++iR) {
         for (int iC = 2; iC < nBin; ++iC) {
@@ -775,6 +798,11 @@ void EFTFitter::computeFitChi2(const std::map<std::string, std::vector<double>> 
 
           fitChi2 += deltaR * deltaC * invMat(iR - 2, iC - 2);
         }
+      }
+
+      if (fitMode == Fit::hybrid) {
+        const int iXs = (statMode == Stat::xsec) ? 0 : 1;
+        fitChi2 += std::pow(dataContent.at(iXs).at(0) - opContent.at(iXs).at(0), 2.) / std::pow(dataContent.at(iXs).at(1), 2.);
       }
 
       m_fitChi2.insert({{key, samp}, fitChi2});
@@ -788,7 +816,7 @@ void EFTFitter::computeFitChi2(const std::map<std::string, std::vector<double>> 
 
 void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, std::vector<double>, 
                            std::array<double, 2>, std::array<double, 2>>> &mt_opInfo, 
-                           const std::string &dirName, const std::vector<Sample> v_sample) const
+                           const std::string &dirName, const std::vector<Sample> &v_sample) const
 {
   if (m_fitChi2.empty())
     throw std::logic_error( "This method shouldn't be called before the computeFitChi2() method!!" );
@@ -1066,7 +1094,7 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
 void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
                            std::array<std::pair<std::string, std::array<double, 2>>, 2>> &mt_opPair,
-                           const std::string &dirName, const std::vector<Sample> v_sample) const
+                           const std::string &dirName, const std::vector<Sample> &v_sample) const
 {
   if (m_fitChi2.empty())
     throw std::logic_error( "This method shouldn't be called before the computeFitChi2() method!!" );
@@ -1486,7 +1514,7 @@ void EFTFitter::assignInSituXsec(std::vector<std::array<double, 2>> &v_binConten
 
 
 
-std::vector<std::array<double, 2>> EFTFitter::interpolateOpValue(const std::string &keyName, const Sample &sampleType)
+std::vector<std::array<double, 2>> EFTFitter::interpolateOpValue(const std::string &keyName, const Sample sampleType)
 {
   if (m_op1Eq1.empty() or (v_opName.size() > 1 and m_op2Eq1.empty()))
     throw std::logic_error( "This method shouldn't be called given the insuffiencient input! "
@@ -1494,7 +1522,7 @@ std::vector<std::array<double, 2>> EFTFitter::interpolateOpValue(const std::stri
 
   // these are gonna pop up often
   const int nBin = std::begin(m_binContent)->second.size();
-  const int iXs = 1; // (statMode == Stat::xsec) ? 0 : 1; // always do interpolation with raw count
+  const int iXs = (statMode == Stat::xsec) ? 0 : 1;
   const double sqLambda = std::pow(eftLambda, 2.), quLambda = std::pow(eftLambda, 4.);
 
   // ok let's start interpolating - first prepare the bin contents starting from SM
@@ -1627,7 +1655,7 @@ std::string EFTFitter::fixKeyFormat(const std::string &keyName) const
 
 
 
-bool EFTFitter::checkOpSet(const std::string &keyName, const Sample &sampleType)
+bool EFTFitter::checkOpSet(const std::string &keyName, const Sample sampleType)
 {
   // data checks
   if (keyName == dataName) {
@@ -1689,7 +1717,7 @@ void EFTFitter::unpackOpGrid(std::vector<std::string> &v_opGrid,
 
 
 
-std::unique_ptr<TH1D> EFTFitter::convertContentToHist(const std::string &keyName, const Sample &sampleType, const bool divideBinWidth)
+std::unique_ptr<TH1D> EFTFitter::convertContentToHist(const std::string &keyName, const Sample sampleType, const bool divideBinWidth)
 {
   // grab the content to be converted; make the hist or if necessary, interpolate it
   const std::vector<std::array<double, 2>> v_binC = (m_binContent.count({keyName, sampleType}) == 0) ? 

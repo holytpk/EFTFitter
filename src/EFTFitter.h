@@ -6,10 +6,10 @@
 #ifndef EFTFITTER_H
 #define EFTFITTER_H
 
-#include <random>
-#include <chrono>
-
 #include "TemplateUtil.h"
+
+//#include <random>
+//#include <chrono>
 
 #include "TROOT.h"
 #include "TFile.h"
@@ -41,14 +41,15 @@ class EFTFitter {
  public:
   // what kind of fit we're gonna be using
   enum class Fit : char {
-    absolute = 'a',  // absolute: use the xsec/counts in the fit
-    shape = 's' // shape comparison only
+    absolute = 'a', // absolute: use the xsec/counts and shape together in the fit
+    shape = 's', // shape comparison only
+    hybrid = 'h' // hybrid fit where rate and shape are separately fitted
   };
 
   // what kind of statistic to report
   enum class Stat : char {
     count = 'c', // use event counts
-    xsec = 'x' // use xsec (no unit, so ensure it's consistent throughout)
+    xsec = 'x' // use xsec (no unit check, so ensure it's consistent throughout)
   };
 
   /// constructors
@@ -63,11 +64,16 @@ class EFTFitter {
   };
 
   /// dump the histogram from file into map after normalization; can also add to existing key instead of overwrite
-  /// to not activate the lumi normalization just assign a 0. xsec and/or statIntegral to count
-  /// to assign the integral into xsec, just set the statIntegral flag accordingly (default is count)
-  void addRawInput(const std::string &keyName, const Sample &sampleType, 
+  /// if fit mode is Fit::hybrid, normalizedSum is exactly that - assigned to count/xsec based on arg sumStat
+  /// in this case if normalizedSum error (second entry) is 0 and sumStat is Stat::count, it is set to sqrt of value
+  /// note that template integral is completely ignored in this case - it supplies only the shape
+  /// otherwise, if fit mode is absolute, the integral of the template is assigned to count/xsec (likewise for its error)
+  /// if sumStat is Stat::count and normalizedSum value is not 0, lumi normalization is done (assuming MC template of weighted count)
+  /// to not do lumi normalization just set normalizedSum value to 0 (its error is ignored anyway)
+  /// Fit::shape acts like absolute, but it doesn't matter either way (only shape and shapeSum are used in fit)
+  void addRawInput(const std::string &keyName, const Sample sampleType, 
                    const std::string &fileName, const std::string &histName, const std::string &sumName = "",
-                   const int nRebin = 1, const double xsec = 0., const Stat &statIntegral = Stat::count,
+                   const int nRebin = 1, const std::array<double, 2> &normalizedSum = {0., 0.}, const Stat sumStat = Stat::count,
                    const bool addIfPresent = false);
 
   /// draw histograms into canvas
@@ -106,14 +112,14 @@ class EFTFitter {
   /// tuple is op text (as to appear in legend), op range to plot, y and x range of plot
   void draw1DChi2(const std::map<std::string, std::tuple<std::string, std::vector<double>, 
                   std::array<double, 2>, std::array<double, 2>>> &mt_opInfo,
-                  const std::string &dirName, const std::vector<Sample> v_sample = {Sample::all, Sample::linear}) const;
+                  const std::string &dirName, const std::vector<Sample> &v_sample = {Sample::all, Sample::linear}) const;
 
   /// draw all the 2D dChi2 contours for each operator pair
   /// tuple is op1-op2 text (as to appear in axes), op1-op2 range to plot
   /// op1 will be on y-axis, op2 on x-axis
   void draw2DChi2(const std::map<std::array<std::string, 2>, 
                   std::array<std::pair<std::string, std::array<double, 2>>, 2>> &mt_opPair,
-                  const std::string &dirName, const std::vector<Sample> v_sample = {Sample::all, Sample::linear}) const;
+                  const std::string &dirName, const std::vector<Sample> &v_sample = {Sample::all, Sample::linear}) const;
 
   /// clear all contents, leaving only those initialized in ctor intact
   void clearContent();
@@ -131,7 +137,7 @@ class EFTFitter {
   void assignInSituXsec(std::vector<std::array<double, 2>> &v_binContent);
 
   /// construct interpolated content for a given key
-  std::vector<std::array<double, 2>> interpolateOpValue(const std::string &keyName, const Sample &sampleType);
+  std::vector<std::array<double, 2>> interpolateOpValue(const std::string &keyName, const Sample sampleType);
 
   /// parse the operator name and its coeff value from key
   std::map<std::string, double> parseOpFromKey(const std::string &keyName) const;
@@ -143,7 +149,7 @@ class EFTFitter {
   std::string fixKeyFormat(const std::string &keyName) const;
 
   /// ensure that the fit value map cover the same operator set and each operator-value set occurs only once
-  bool checkOpSet(const std::string &keyName, const Sample &sampleType);
+  bool checkOpSet(const std::string &keyName, const Sample sampleType);
 
   /// unpack the grid into individual operator-value set and return them as keys
   void unpackOpGrid(std::vector<std::string> &v_opGrid, 
@@ -152,7 +158,7 @@ class EFTFitter {
                     const std::string &iniStr) const;
 
   /// convert contents back to histogram for drawing
-  std::unique_ptr<TH1D> convertContentToHist(const std::string &keyName, const Sample &sampleType, const bool divideBinWidth = false);
+  std::unique_ptr<TH1D> convertContentToHist(const std::string &keyName, const Sample sampleType, const bool divideBinWidth = false);
 
   /// members
   /// sample name to be treated as data and fit against
