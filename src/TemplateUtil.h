@@ -72,6 +72,16 @@ void fillInterval(std::vector<Number> &vec, Number from, Number to, Number step)
 
 
 
+/// method that makes such an interval vector relying on the above
+template <typename Number> std::vector<Number> makeInterval(Number from, Number to, Number step)
+{
+  std::vector<Number> v_interval = {from};
+  fillInterval(v_interval, from, to, step);
+  return v_interval;
+}
+
+
+
 /// unary predicate that is always true; to be used in the specializations (where all elements are to be extracted)
 /// always true because sizeof(obj) is never be 0
 const auto alwaysTrue = [] (const auto &obj) { return sizeof(obj); };
@@ -160,7 +170,7 @@ template <typename One, typename Two> std::ostream& operator<<(std::ostream& out
 
 
 
-/// master-cout of elements in container https://eli.thegreenplace.net/2014/variadic-templates-in-c/                                        
+/// master-cout of elements in container https://eli.thegreenplace.net/2014/variadic-templates-in-c/
 /// it requires << to be defined for type Value however, so no printing of map of vectors etc yet :(
 /// note to Afiq: don't, DON'T try to work on this; it's hard
 /// wont compile if used for containers with not-streamable value types
