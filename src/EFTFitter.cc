@@ -480,6 +480,8 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
   //can->Write();
   for (auto &hist : m_hist) hist.second->Write();
   for (auto &ratio : m_ratio) ratio.second->Write();
+
+  std::cout << std::endl;
 }
 
 
@@ -698,6 +700,8 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
     //can->Write();
     h_cMat->Write();
   }
+
+  std::cout << std::endl;
 }
 
 
@@ -1237,63 +1241,64 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       ag_dChi2.at(iSamp)->SetName((opName + "_" + toStr(samp)).c_str());
       ag_dChi2.at(iSamp)->SetTitle("");
 
-      // also prepare the stuff for 2 and 1 sigma bands (first sample type only)
+      // also prepare the stuff for 2 and 1 sigma bands
       // threshold is dChi2 containing 1 and 2 sigma for chi2 with 1 ndf (since we're fitting 1 op)
       // obtained with 1. - TMath::Prob(raw_chi2, ndf)
+      const auto itBegin = std::begin(av_dChi2.at(iSamp));
+
+      // 1 sigma D, U band
+      const std::pair<decltype(itBegin), decltype(itBegin)> p_it1Sig = f_dChi2Band(av_dChi2.at(iSamp), 1.);
+
+      // check that both iterators are good
+      if ( p_it1Sig.first == std::end(av_dChi2.at(iSamp)) or p_it1Sig.second == std::end(av_dChi2.at(iSamp)) ) {
+        std::cout << "Requested fit range for operator " << opName << 
+          " is insufficient to define the 1 sigma bands! Skipping..." << std::endl;
+        drawSig1 = false;
+        break;
+      }
+
+      // 2 sigma D, U band
+      const std::pair<decltype(itBegin), decltype(itBegin)> p_it2Sig = f_dChi2Band(av_dChi2.at(iSamp), 4.);
+
+      // check that both iterators are good
+      if ( p_it2Sig.first == std::end(av_dChi2.at(iSamp)) or p_it2Sig.second == std::end(av_dChi2.at(iSamp)) ) {
+        std::cout << "Requested fit range for operator " << opName << 
+          " is insufficient to define the 2 sigma bands! Skipping..." << std::endl;
+        drawSig2 = false;
+      }
+
+      // ok we've got the iterators, now get the actual errors - 2D, 2U, 1D, 1U
+      const int i1SigD = std::distance(itBegin, p_it1Sig.first);
+      const int i1SigU = std::distance(itBegin, p_it1Sig.second);
+      const int i2SigD = std::distance(itBegin, p_it2Sig.first);
+      const int i2SigU = std::distance(itBegin, p_it2Sig.second);
+
+      const double err1SigD = std::abs(opMin - av_opVal.at(iSamp).at(i1SigD));
+      const double err1SigU = std::abs(av_opVal.at(iSamp).at(i1SigU) - opMin);
+      const double err2SigD = (drawSig2) ? std::abs(opMin - av_opVal.at(iSamp).at(i2SigD)) : 0.;
+      const double err2SigU = (drawSig2) ? std::abs(av_opVal.at(iSamp).at(i2SigU) - opMin) : 0.;
+
+      const double dChi2SigD = (drawSig2) ? av_dChi2.at(iSamp).at(i2SigD) : 0.;
+      const double dChi2SigU = (drawSig2) ? av_dChi2.at(iSamp).at(i2SigU) : 0.;
+
+      // make the needed vectors for the points of the band graphs - zeros, verticals and such
+      const std::array<double, 2> a_opMin = {opMin, opMin};
+      const std::array<double, 2> a_1SigD = {err1SigD, err1SigD};
+      const std::array<double, 2> a_1SigU = {err1SigU, err1SigU};
+      const std::array<double, 2> a_2SigD = {err2SigD, err2SigD};
+      const std::array<double, 2> a_2SigU = {err2SigU, err2SigU};
+
+      std::cout << "Best fit result " << opName << ", sample " << samp << ": " << opMin << 
+        " - " << err1SigD << " + " << err1SigU << " (1 sigma) - " << 
+        err2SigD << " + " << err2SigU << " (2 sigma)" << std::endl;
+
+      std::cout << "Best fit dChi2 "<< opName << ", sample " << samp << ": 0 - " << 
+        av_dChi2.at(iSamp).at(i1SigD) <<
+        " + " << av_dChi2.at(iSamp).at(i1SigU) << " (1 sigma) - " << 
+        dChi2SigD << " + " << dChi2SigU << " (2 sigma)" << std::endl;
+
+      // and for the first sample type, draw the bands
       if (samp == v_sample.front()) {
-        const auto itBegin = std::begin(av_dChi2.at(iSamp));
-
-        // 1 sigma D, U band
-        const std::pair<decltype(itBegin), decltype(itBegin)> p_it1Sig = f_dChi2Band(av_dChi2.at(iSamp), 1.);
-
-        // check that both iterators are good
-        if ( p_it1Sig.first == std::end(av_dChi2.at(iSamp)) or p_it1Sig.second == std::end(av_dChi2.at(iSamp)) ) {
-          std::cout << "Requested fit range for operator " << opName << 
-            " is insufficient to define the 1 sigma bands! Skipping..." << std::endl;
-          drawSig1 = false;
-          break;
-        }
-
-        // 2 sigma D, U band
-        const std::pair<decltype(itBegin), decltype(itBegin)> p_it2Sig = f_dChi2Band(av_dChi2.at(iSamp), 4.);
-
-        // check that both iterators are good
-        if ( p_it2Sig.first == std::end(av_dChi2.at(iSamp)) or p_it2Sig.second == std::end(av_dChi2.at(iSamp)) ) {
-          std::cout << "Requested fit range for operator " << opName << 
-            " is insufficient to define the 2 sigma bands! Skipping..." << std::endl;
-          drawSig2 = false;
-        }
-
-        // ok we've got the iterators, now get the actual errors - 2D, 2U, 1D, 1U
-        const int i1SigD = std::distance(itBegin, p_it1Sig.first);
-        const int i1SigU = std::distance(itBegin, p_it1Sig.second);
-        const int i2SigD = std::distance(itBegin, p_it2Sig.first);
-        const int i2SigU = std::distance(itBegin, p_it2Sig.second);
-
-        const double err1SigD = std::abs(opMin - av_opVal.at(iSamp).at(i1SigD));
-        const double err1SigU = std::abs(av_opVal.at(iSamp).at(i1SigU) - opMin);
-        const double err2SigD = (drawSig2) ? std::abs(opMin - av_opVal.at(iSamp).at(i2SigD)) : 0.;
-        const double err2SigU = (drawSig2) ? std::abs(av_opVal.at(iSamp).at(i2SigU) - opMin) : 0.;
-
-        const double dChi2SigD = (drawSig2) ? av_dChi2.at(iSamp).at(i2SigD) : 0.;
-        const double dChi2SigU = (drawSig2) ? av_dChi2.at(iSamp).at(i2SigU) : 0.;
-
-        // make the needed vectors for the points of the band graphs - zeros, verticals and such
-        const std::array<double, 2> a_opMin = {opMin, opMin};
-        const std::array<double, 2> a_1SigD = {err1SigD, err1SigD};
-        const std::array<double, 2> a_1SigU = {err1SigU, err1SigU};
-        const std::array<double, 2> a_2SigD = {err2SigD, err2SigD};
-        const std::array<double, 2> a_2SigU = {err2SigU, err2SigU};
-
-        std::cout << "Best fit result " << opName << ", sample " << samp << ": " << opMin << 
-          " - " << err1SigD << " + " << err1SigU << " (1 sigma) - " << 
-          err2SigD << " + " << err2SigU << " (2 sigma)" << std::endl;
-
-        std::cout << "Best fit dChi2 "<< opName << ", sample " << samp << ": 0 - " << 
-          av_dChi2.at(iSamp).at(i1SigD) <<
-          " + " << av_dChi2.at(iSamp).at(i1SigU) << " (1 sigma) - " << 
-          dChi2SigD << " + " << dChi2SigU << " (2 sigma)" << std::endl;
-
         // guiding line graph
         ag_sigma.at(0) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
                                                              a_zero.data(), a_zero.data(), a_zero.data(), a_zero.data());
@@ -1325,10 +1330,10 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
           ag_sigma.at(2)->SetName((opName + "_sigma2_" + toStr(samp)).c_str());
           ag_sigma.at(2)->SetTitle("");
 
-          leg->AddEntry(ag_sigma.at(2).get(), "#pm 2#sigma", "f");
+          leg->AddEntry(ag_sigma.at(2).get(), ("#pm 2#sigma" + a_sampLeg.at(iSamp)).c_str(), "f");
         }
 
-        leg->AddEntry(ag_sigma.at(1).get(), "#pm 1#sigma", "f");
+        leg->AddEntry(ag_sigma.at(1).get(), ("#pm 1#sigma" + a_sampLeg.at(iSamp)).c_str(), "f");
       }
 
       if (ag_dChi2.at(iSamp) != nullptr)
