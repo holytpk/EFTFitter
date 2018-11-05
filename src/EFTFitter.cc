@@ -194,7 +194,6 @@ void EFTFitter::setHybridTransformation(const std::function<std::vector<std::arr
   if (fitMode != Fit::hybrid)
     throw std::logic_error( "setHybridTransformation() method is only usable in Fit::hybrid!!" );
 
-  /// FIXME fill this up
   if (f_hybridTransform)
     std::cout << "Hybrid transformation function already available, overwriting it..." << std::endl;
   f_hybridTransform = func;
@@ -1000,7 +999,9 @@ void EFTFitter::listKeyToFit(const std::map<std::string, std::vector<double>> &m
 
 void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, const int binToIgnore)
 {
-  if (!hasData or v_keyToFit.empty() or !m_covMat.count("finalCov"))
+  const bool rateFit = (fitMode == Fit::hybrid and v_rawBin.empty());
+
+  if (!hasData or v_keyToFit.empty() or (!m_covMat.count("finalCov") and !rateFit))
     throw std::range_error( "This method shouldn't be called given the insuffiencient input! "
                             "Ensure contents (inserted with addRawInput() or interpolatable with prepareInterpolationBase()), "
                             "list of keys to be fitted on (made with listKeyToFit()) "
@@ -1023,7 +1024,10 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, const int bi
   //std::cout << "ignore " << binToIgnore << " nBin " << nBin << " nBinEach " << nBinEach << " nHist " << nHist << std::endl;
 
   TMatrixD invMat;
-  if (fitMode != Fit::shape) {
+  // do nothing for rate fits
+  if (rateFit)
+    ;
+  else if (fitMode != Fit::shape) {
     // must resize before copy-assign: https://root.cern.ch/how/how-create-and-fill-matrix
     invMat.ResizeTo(m_covMat.at("finalCov"));
     invMat = m_covMat.at("finalCov");
@@ -1050,6 +1054,7 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, const int bi
   }
 
   //TMatrixD invMat = m_covMat.at("finalCov");
+  //std::cout << "" << TDecompLU(invMat).Condition() << std::endl;
   invMat.Invert();
 
   for (const auto &key : v_keyToFit) {
@@ -1133,7 +1138,7 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
   // nBin - (1 for shape bin drop) + (1 if hybrid has rate) - nOp
   const int iXs = (statMode == Stat::xsec) ? 0 : 1;
-  const int nDoF = v_rawBin.size() - 1
+  const int nDoF = v_rawBin.size() - 1 + v_rawBin.empty()
     - (fitMode == Fit::shape)
     + (fitMode == Fit::hybrid and m_binContent.at({dataName, Sample::all}).at(iXs).at(0) > 0.)
     - 1;
@@ -1193,7 +1198,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
     // and we make the graph
     bool drawSig1 = true, drawSig2 = true;
     std::array<std::unique_ptr<TGraph>, 2> ag_dChi2 = {nullptr, nullptr};
-    std::array<std::unique_ptr<TGraphAsymmErrors>, 3> ag_sigma = {nullptr, nullptr, nullptr};
+    std::array<std::array<std::unique_ptr<TGraphAsymmErrors>, 3>, 2> ag_sigma = {{{nullptr, nullptr, nullptr},
+                                                                                  {nullptr, nullptr, nullptr}}};
     auto leg = std::make_unique<TLegend>();
     for (auto &samp : v_sample) {
       const int iSamp = static_cast<int>(samp);
@@ -1254,7 +1260,6 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
         std::cout << "Requested fit range for operator " << opName << 
           " is insufficient to define the 1 sigma bands! Skipping..." << std::endl;
         drawSig1 = false;
-        break;
       }
 
       // 2 sigma D, U band
@@ -1273,11 +1278,13 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       const int i2SigD = std::distance(itBegin, p_it2Sig.first);
       const int i2SigU = std::distance(itBegin, p_it2Sig.second);
 
-      const double err1SigD = std::abs(opMin - av_opVal.at(iSamp).at(i1SigD));
-      const double err1SigU = std::abs(av_opVal.at(iSamp).at(i1SigU) - opMin);
+      const double err1SigD = (drawSig1) ? std::abs(opMin - av_opVal.at(iSamp).at(i1SigD)) : 0.;
+      const double err1SigU = (drawSig1) ? std::abs(av_opVal.at(iSamp).at(i1SigU) - opMin) : 0.;
       const double err2SigD = (drawSig2) ? std::abs(opMin - av_opVal.at(iSamp).at(i2SigD)) : 0.;
       const double err2SigU = (drawSig2) ? std::abs(av_opVal.at(iSamp).at(i2SigU) - opMin) : 0.;
 
+      const double dChi1SigD = (drawSig1) ? av_dChi2.at(iSamp).at(i1SigD) : 0.;
+      const double dChi1SigU = (drawSig1) ? av_dChi2.at(iSamp).at(i1SigU) : 0.;
       const double dChi2SigD = (drawSig2) ? av_dChi2.at(iSamp).at(i2SigD) : 0.;
       const double dChi2SigU = (drawSig2) ? av_dChi2.at(iSamp).at(i2SigU) : 0.;
 
@@ -1293,47 +1300,47 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
         err2SigD << " + " << err2SigU << " (2 sigma)" << std::endl;
 
       std::cout << "Best fit dChi2 "<< opName << ", sample " << samp << ": 0 - " << 
-        av_dChi2.at(iSamp).at(i1SigD) <<
-        " + " << av_dChi2.at(iSamp).at(i1SigU) << " (1 sigma) - " << 
+        dChi1SigD << " + " << dChi1SigU << " (1 sigma) - " << 
         dChi2SigD << " + " << dChi2SigU << " (2 sigma)" << std::endl;
 
-      // and for the first sample type, draw the bands
-      if (samp == v_sample.front()) {
+      if (drawSig1) {
         // guiding line graph
-        ag_sigma.at(0) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
-                                                             a_zero.data(), a_zero.data(), a_zero.data(), a_zero.data());
-        FitUtil::stylePlot(ag_sigma.at(0), kBlack, 1., 0, 20, 1.5, 8, 2);
-        FitUtil::axisPlot(ag_sigma.at(0), 
+        ag_sigma.at(iSamp).at(0) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
+                                                                       a_zero.data(), a_zero.data(), a_zero.data(), a_zero.data());
+        FitUtil::stylePlot(ag_sigma.at(iSamp).at(0), kBlack, 1., 0, 20, 1.5, 8, 2);
+        FitUtil::axisPlot(ag_sigma.at(iSamp).at(0), 
                           yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
                           xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
-        ag_sigma.at(0)->SetName((opName + "_sigma0_" + toStr(samp)).c_str());
-        ag_sigma.at(0)->SetTitle("");
+        ag_sigma.at(iSamp).at(0)->SetName((opName + "_sigma0_" + toStr(samp)).c_str());
+        ag_sigma.at(iSamp).at(0)->SetTitle("");
 
         // 1 sigma graph
-        ag_sigma.at(1) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
-                                                             a_1SigD.data(), a_1SigU.data(), a_vErrD.data(), a_vErrU.data());
-        FitUtil::stylePlot(ag_sigma.at(1), kGreen + 1, 1., 1001, 0, 1.5, 1, 2);
-        FitUtil::axisPlot(ag_sigma.at(1), 
+        ag_sigma.at(iSamp).at(1) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
+                                                                       a_1SigD.data(), a_1SigU.data(), a_vErrD.data(), a_vErrU.data());
+        FitUtil::stylePlot(ag_sigma.at(iSamp).at(1), kGreen + 1, 1., 1001, 0, 1.5, 1, 2);
+        FitUtil::axisPlot(ag_sigma.at(iSamp).at(1), 
                           yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
                           xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
-        ag_sigma.at(1)->SetName((opName + "_sigma1_" + toStr(samp)).c_str());
-        ag_sigma.at(1)->SetTitle("");
+        ag_sigma.at(iSamp).at(1)->SetName((opName + "_sigma1_" + toStr(samp)).c_str());
+        ag_sigma.at(iSamp).at(1)->SetTitle("");
 
         if (drawSig2) {
           // 2 sigma graph
-          ag_sigma.at(2) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
-                                                               a_2SigD.data(), a_2SigU.data(), a_vErrD.data(), a_vErrU.data());
-          FitUtil::axisPlot(ag_sigma.at(2), 
+          ag_sigma.at(iSamp).at(2) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
+                                                                         a_2SigD.data(), a_2SigU.data(), a_vErrD.data(), a_vErrU.data());
+          FitUtil::axisPlot(ag_sigma.at(iSamp).at(2), 
                             yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
                             xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
-          FitUtil::stylePlot(ag_sigma.at(2), kOrange, 1., 1001, 0, 1.5, 1, 2);
-          ag_sigma.at(2)->SetName((opName + "_sigma2_" + toStr(samp)).c_str());
-          ag_sigma.at(2)->SetTitle("");
+          FitUtil::stylePlot(ag_sigma.at(iSamp).at(2), kOrange, 1., 1001, 0, 1.5, 1, 2);
+          ag_sigma.at(iSamp).at(2)->SetName((opName + "_sigma2_" + toStr(samp)).c_str());
+          ag_sigma.at(iSamp).at(2)->SetTitle("");
 
-          leg->AddEntry(ag_sigma.at(2).get(), ("#pm 2#sigma" + a_sampLeg.at(iSamp)).c_str(), "f");
+          if (samp == v_sample.front())
+            leg->AddEntry(ag_sigma.at(iSamp).at(2).get(), ("#pm 2#sigma" + a_sampLeg.at(iSamp)).c_str(), "f");
         }
 
-        leg->AddEntry(ag_sigma.at(1).get(), ("#pm 1#sigma" + a_sampLeg.at(iSamp)).c_str(), "f");
+        if (samp == v_sample.front())
+          leg->AddEntry(ag_sigma.at(iSamp).at(1).get(), ("#pm 1#sigma" + a_sampLeg.at(iSamp)).c_str(), "f");
       }
 
       if (ag_dChi2.at(iSamp) != nullptr)
@@ -1350,7 +1357,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
     // for tacking on some text on the plot
     const std::string topMid = "#Lambda = " + toStr(eftLambda) + " TeV";
     TLatex txt;
-    txt.SetTextSize(0.039);
+    //txt.SetTextSize(0.039); // standard
+    txt.SetTextSize(0.043); // cms
     txt.SetTextAlign(13);
 
     can->cd();
@@ -1368,10 +1376,10 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
     if (drawSig1) {
       if (drawSig2)
-        ag_sigma.at(2)->Draw("2");
+        ag_sigma.at(static_cast<int>(v_sample.front())).at(2)->Draw("2");
 
-      ag_sigma.at(1)->Draw("2");
-      ag_sigma.at(0)->Draw("l");
+      ag_sigma.at(static_cast<int>(v_sample.front())).at(1)->Draw("2");
+      ag_sigma.at(static_cast<int>(v_sample.front())).at(0)->Draw("l");
     }
 
     for (const auto &g_dChi2 : ag_dChi2) {
@@ -1391,9 +1399,11 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       if (g_dChi2 == nullptr) continue; 
       g_dChi2->Write();
     }
-    for (const auto &g_sig : ag_sigma) {
-      if (g_sig == nullptr) continue; 
-      g_sig->Write();
+    for (const auto &ag_sig : ag_sigma) {
+      for (const auto &g_sig : ag_sig) {
+        if (g_sig == nullptr) continue; 
+        g_sig->Write();
+      }
     }
 
     std::cout << std::endl;
@@ -1444,7 +1454,7 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
 
   // nBin - (1 for shape bin drop) + (1 if hybrid has rate) - nOp
   const int iXs = (statMode == Stat::xsec) ? 0 : 1;
-  const int nDoF = v_rawBin.size() - 1
+  const int nDoF = v_rawBin.size() - 1 + v_rawBin.empty()
     - (fitMode == Fit::shape)
     + (fitMode == Fit::hybrid and m_binContent.at({dataName, Sample::all}).at(iXs).at(0) > 0.)
     - 2;

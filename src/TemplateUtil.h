@@ -77,7 +77,7 @@ template <typename Number> std::vector<Number> makeInterval(Number from, Number 
 {
   std::vector<Number> v_interval = {from};
   fillInterval(v_interval, from, to, step);
-  return v_interval;
+  return (v_interval.size() > 1) ? v_interval : std::vector<Number>{};
 }
 
 
