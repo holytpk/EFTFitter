@@ -37,6 +37,7 @@
 
 #include "TMath.h"
 #include "TMatrixD.h"
+//#include "TDecompLU.h"
 
 class EFTFitter {
  public:
@@ -95,6 +96,9 @@ class EFTFitter {
                      const std::function<std::vector<std::array<double, 2>> (const std::vector<std::array<double, 2>> &)> &func = nullptr);
 
   /// draw histograms into canvas
+  /// most options involve controlling the axes (names should be self-explanatory)
+  /// ratioMode are either none, simple or covariance - none is none, simple means simple MC/data ratio, while covariance does MC - data / error
+  /// covariance mode will only work if final covariance matrix is already available
   void drawHistogram(const std::vector< std::tuple<std::string, Sample, std::string> > &vt_keySampleLegend,
                      const std::string &plotName, const std::string &yLabel, const std::string &xLabel,
                      const double histMin, const double histMax, const double ratioMin, const double ratioMax, 
@@ -105,7 +109,7 @@ class EFTFitter {
   void autoCovMatStatCorr();
 
   /// make automatic covariance matrix of data sample base on rate uncertainties (e. g. lumi)
-  /// matrix coeff c_ii = sq(rateUnc * content of bin i)
+  /// matrix coeff c_ij = sq(rateUnc * rateUnc * content of bin i * content of bin j)
   void autoCovMatRate(const double rateUnc = 0.01);
 
   /// read covariance matrix from a root file (assumes it's stored as TH2, can also select parts of it)
@@ -131,13 +135,22 @@ class EFTFitter {
   void assignAsData(const std::string &keyName, const Sample sampleType, const bool varyWithinError = false);
 
   /// make the list of keys to fit on
+  /// currently grid building code stops at 2 operators != 0
+  /// easily disabled when proper minimization is available
   void listKeyToFit(const std::map<std::string, std::vector<double>> &m_opGrid);
 
+  /// FIXME proper minimization of chi2 such that listKeyToFit() doesnt need to supply billions of points
   /// compute the test statistic for a given set of keys and fill into map
   /// can control if want the fit only for a sample
-  /// also which bin to ignore in case of shape fit (for the automated bin dropper algo)
+  /// also which bin to ignore in case of shape fit (for the automatic bin dropper algo)
   void computeFitChi2(const std::vector<Sample> &v_sample = {Sample::all, Sample::linear}, const int binToIgnore = 1);
 
+  /// FIXME in their current forms, drawNDChi2 methods are extremely inefficient
+  /// FIXME handling of output file names is awkward at best
+  /// FIXME restriction of drawing each operator once per invocation is also terrible
+  /// FIXME methods spend most time doing the minimum and interval/contour search
+  /// FIXME but there's no need to do this at every single invocation - do it once per request and cache
+  /// FIXME needs to be coded in
   /// draw all the 1D dChi2 graphs for each operator
   /// tuple is op text (as to appear in legend), op range to plot, y and x range of plot
   void draw1DChi2(const std::map<std::string, std::tuple<std::string, std::vector<double>, 
@@ -145,7 +158,7 @@ class EFTFitter {
                   const std::string &plotName, const std::vector<Sample> &v_sample = {Sample::all, Sample::linear}) const;
 
   /// draw all the 2D dChi2 contours for each operator pair
-  /// tuple is op1-op2 text (as to appear in axes), op1-op2 range to plot
+  /// array is op1-op2 text (as to appear in axes), op1-op2 range to plot
   /// op1 will be on y-axis, op2 on x-axis
   void draw2DChi2(const std::map<std::array<std::string, 2>, 
                   std::array<std::pair<std::string, std::array<double, 2>>, 2>> &mt_opPair,
@@ -264,8 +277,12 @@ namespace FitUtil {
   static std::mt19937_64 rng(std::random_device{}());
 
   /// standard text on plots
+  /// nicer-looking
   const std::string topLeft = "#bf{CMS} #it{Private Work}"; 
   const std::string topRight = "35.9 /fb @ 13 TeV";
+  /// ehh CMS
+  //const std::string topLeft = "#bf{CMS}"; 
+  //const std::string topRight = "35.9 /fb (13 TeV)";
 
   /// style of TH1 - reproducing the TDRStyle macro
   void setH1Style();

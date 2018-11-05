@@ -1388,11 +1388,11 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
     }
 
     can->RedrawAxis();
-    can->SaveAs((plotName + "_dChi2.pdf").c_str());
-    //can->SaveAs((plotName + "_dChi2.C").c_str());
+    can->SaveAs((plotName + opName + "_dChi2.pdf").c_str());
+    //can->SaveAs((plotName + opName + "_dChi2.C").c_str());
 
     // save them into a file
-    auto file = std::make_unique<TFile>((plotName + "_dChi2.root").c_str(), "recreate");
+    auto file = std::make_unique<TFile>((plotName + opName + "_dChi2.root").c_str(), "recreate");
     file->cd();
     //can->Write();
     for (const auto &g_dChi2 : ag_dChi2) {
@@ -1732,11 +1732,11 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
     }
 
     can->RedrawAxis();
-    can->SaveAs((plotName + "_dChi2.pdf").c_str());
-    //can->SaveAs((plotName + "_dChi2.C").c_str());
+    can->SaveAs((plotName + op1Name + "_" + op2Name + "_dChi2.pdf").c_str());
+    //can->SaveAs((plotName + op1Name + "_" + op2Name + "_dChi2.C").c_str());
 
     // save them into a file
-    auto file = std::make_unique<TFile>((plotName + "_dChi2.root").c_str(), "recreate");
+    auto file = std::make_unique<TFile>((plotName + op1Name + "_" + op2Name + "_dChi2.root").c_str(), "recreate");
     file->cd();
     //can->Write();
     for (const auto &samp : v_sample) {
