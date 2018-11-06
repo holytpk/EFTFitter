@@ -143,14 +143,14 @@ class EFTFitter {
   /// compute the test statistic for a given set of keys and fill into map
   /// can control if want the fit only for a sample
   /// also which bin to ignore in case of shape fit (for the automatic bin dropper algo)
-  void computeFitChi2(const std::vector<Sample> &v_sample = {Sample::all, Sample::linear}, const int binToIgnore = 1);
+  void computeFitChi2(const std::vector<Sample> &v_sample = {Sample::all, Sample::linear}, int binToIgnore = 1);
 
   /// FIXME in their current forms, drawNDChi2 methods are extremely inefficient
   /// FIXME handling of output file names is awkward at best
   /// FIXME restriction of drawing each operator once per invocation is also terrible
   /// FIXME methods spend most time doing the minimum and interval/contour search
   /// FIXME but there's no need to do this at every single invocation - do it once per request and cache
-  /// FIXME needs to be coded in
+  /// FIXME structure needs rethinking/recoding
   /// draw all the 1D dChi2 graphs for each operator
   /// tuple is op text (as to appear in legend), op range to plot, y and x range of plot
   void draw1DChi2(const std::map<std::string, std::tuple<std::string, std::vector<double>, 

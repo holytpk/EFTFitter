@@ -997,7 +997,7 @@ void EFTFitter::listKeyToFit(const std::map<std::string, std::vector<double>> &m
 
 
 
-void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, const int binToIgnore)
+void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgnore)
 {
   const bool rateFit = (fitMode == Fit::hybrid and v_rawBin.empty());
 
@@ -1011,7 +1011,6 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, const int bi
 
   const std::vector<std::array<double, 2>> &dataContent = m_binContent.at({dataName, Sample::all});
   const int nBin = dataContent.size(), iXs = (statMode == Stat::xsec) ? 0 : 1;
-  //const double dataInt = (fitMode != Fit::absolute) ? shapeSum : (statMode == Stat::xsec) ? dataContent.at(0).at(0) : dataContent.at(1).at(0);
   const double dataInt = getContentSum(dataContent);
 
   // ok here we copy and invert the matrix because this is what we actually use
@@ -1023,8 +1022,13 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, const int bi
   const int nHist = (nBin - 2) / nBinEach;
   //std::cout << "ignore " << binToIgnore << " nBin " << nBin << " nBinEach " << nBinEach << " nHist " << nHist << std::endl;
 
+  // reset the bin index in case requested argument doesn't make sense
+  // probably fine to do so silently, it's only used to verify the bin dropper works correctly
+  if (binToIgnore >= nBinEach or binToIgnore < 0)
+    binToIgnore = 1;
+
   TMatrixD invMat;
-  // do nothing for rate fits
+  // do nothing for rate fits - no matrix needed as there's no template
   if (rateFit)
     ;
   else if (fitMode != Fit::shape) {
@@ -1053,15 +1057,12 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, const int bi
     }
   }
 
-  //TMatrixD invMat = m_covMat.at("finalCov");
   //std::cout << "" << TDecompLU(invMat).Condition() << std::endl;
   invMat.Invert();
 
   for (const auto &key : v_keyToFit) {
     for (const auto &samp : v_sample) {
       const std::vector<std::array<double, 2>> opContent = interpolateOpValue(key, samp);
-
-      //const double opInt = (fitMode != Fit::absolute) ? shapeSum : (statMode == Stat::xsec) ? opContent.at(0).at(0) : opContent.at(1).at(0);
       const double opInt = getContentSum(opContent);
 
       // here they're used as offset counters; increment every time a bin is ignored
@@ -2154,10 +2155,8 @@ std::unique_ptr<TH1D> EFTFitter::convertContentToHist(const std::string &keyName
   // and make the histograms
   const int nBin = v_rawBin.size() - 1;
   auto hist = std::make_unique<TH1D>((keyName + "_" + toStr(sampleType)).c_str(), "", nBin, v_rawBin.data());
-
   //std::cout << keyName << " " << nBin << " " << v_binC.size() << std::endl;
 
-  //const double integral = (fitMode == Fit::shape) ? shapeSum : (statMode == Stat::xsec) ? v_binC.at(0).at(0) : v_binC.at(1).at(0);
   const double integral = getContentSum(v_binC);
 
   for (int iB = 1; iB <= nBin; ++iB) {

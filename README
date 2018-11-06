@@ -10,8 +10,10 @@ Notes
 - file exec/example_fit.cc is provided showing how such an execution macro looks like
 - file exec/execMacro.sh is provided to ease compiling and running the macro
 - more details in exec/example_fit.cc
+- also exec/example_hybrid.cc for hybrid mode usage
 
 To-do (in no particular order)
+- address in-code FIXMEs
 - a way to inject styling commands from exec macro
 - generally more flexible workflow
 - saving of computed chi2 into trees
@@ -20,5 +22,5 @@ To-do (in no particular order)
 - settings related to file saving
 
 Feedback and/or bug report are welcome
-Updated	31/10/2018 (example_fit.cc not yet updated)
+Updated	06/11/2018
 
