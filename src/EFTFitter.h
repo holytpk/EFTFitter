@@ -277,12 +277,11 @@ namespace FitUtil {
   static std::mt19937_64 rng(std::random_device{}());
 
   /// standard text on plots
-  /// nicer-looking
-  const std::string topLeft = "#bf{CMS} #it{Private Work}"; 
-  const std::string topRight = "35.9 /fb @ 13 TeV";
-  /// ehh CMS
+  const std::string topLeft = ""; // "#bf{CMS} #it{Private Work}"; 
+  const std::string topRight = ""; // "35.9 /fb @ 13 TeV";
+  /// for publications
   //const std::string topLeft = "#bf{CMS}"; 
-  //const std::string topRight = "35.9 /fb (13 TeV)";
+  //const std::string topRight = "35.9 fb^{-1} (13 TeV)";
 
   /// style of TH1 - reproducing the TDRStyle macro
   void setH1Style();
