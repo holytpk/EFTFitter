@@ -14,13 +14,13 @@ Notes
 
 To-do (in no particular order)
 - address in-code FIXMEs
-- a way to inject styling commands from exec macro
 - generally more flexible workflow
 - saving of computed chi2 into trees
+- also of confidence intervals (in general such that the point computation can be split into multiple jobs)
 - marginal uncertainties for 2 and higher op cases
 - more clever way of chi2 minimization; brute force doesn't scale up with nOp > 1
 - settings related to file saving
 
 Feedback and/or bug report are welcome
-Updated	06/11/2018
+Updated	15/01/2019
 

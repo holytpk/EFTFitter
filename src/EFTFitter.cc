@@ -77,7 +77,7 @@ void EFTFitter::addRawInput(const std::string &keyName, const Sample sampleType,
   // define the binning of the templates
   if (v_rawBin.empty()) {
     if (fitMode != Fit::hybrid)
-      v_rawBin = FitUtil::extractBin( hist );
+      v_rawBin = FitUtil::extractBin( hist.get() );
     else {
       // Fit::hybrid, so just prepare a dummy binContent to make a binning of just integer interval
       // all that matters is that interval length is what one gets out of f_hybridTransform
@@ -95,7 +95,7 @@ void EFTFitter::addRawInput(const std::string &keyName, const Sample sampleType,
       printAll(v_rawBin);
 
       std::cout << "Binning of currently provided template:" << std::endl;
-      printAll(FitUtil::extractBin( hist ));
+      printAll(FitUtil::extractBin( hist.get() ));
 
       throw std::logic_error( "Given raw input with key " + keyName + " :: " + toStr(sampleType) + 
                               " is binned differently than others!!" );
@@ -208,9 +208,11 @@ void EFTFitter::addHybridData(const std::string &fileName, const std::string &hi
   if (fitMode != Fit::hybrid)
     throw std::logic_error( "addHybridData() method is only usable in Fit::hybrid!!" );
 
+  std::cout << "Adding hybrid data..." << std::endl;
+
   const std::pair<std::string, Sample> dataKey = {dataName, Sample::all};
   if (m_binContent.count(dataKey)) {
-    std::cout << " Data already present in map and will be overwritten..." << std::endl;
+    std::cout << "Data already present in map and will be overwritten..." << std::endl;
     m_binContent.erase(dataKey);
   }
 
@@ -248,6 +250,8 @@ void EFTFitter::addHybridData(const std::string &fileName, const std::string &hi
   else
     m_binContent.insert({dataKey, func(v_binContent)});
   hasData = true;
+
+  std::cout << std::endl;
 }
 
 
@@ -319,6 +323,15 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
     if (useCov) {
       hrat->Add(htmp.get(), m_hist.at({dataName, Sample::all}).get(), 1., -1.);
       TMatrixD covmat(m_covMat.at("finalCov"));
+
+      // for shape, drop all non-diagonals (inaccurate, but for visualization it's probably alright)
+      if (fitMode == Fit::shape) {
+        for (int iR = 0; iR < covmat.GetNrows(); ++iR) {
+          for (int iC = 0; iC < covmat.GetNrows(); ++iC)
+            if (iR != iC) covmat(iR, iC) = 0.;
+        }
+      }
+
       covmat.Invert();
 
       for (int iB = 1; iB <= hrat->GetNbinsX(); ++iB) {
@@ -332,15 +345,15 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
     m_hist.insert(std::make_pair( std::make_pair(key, samp), std::move(htmp) ));
     m_ratio.insert(std::make_pair( std::make_pair(key, samp), std::move(hrat) ));
 
-    FitUtil::stylePlot(m_hist.at({key, samp}), *iColor, 1., 0, 21 + std::distance(std::begin(v_kColor), iColor), 1.5, 1, 2);
-    FitUtil::stylePlot(m_ratio.at({key, samp}), *iColor, 1., 0, 21 + std::distance(std::begin(v_kColor), iColor), 1.5, 1, 2);
+    FitUtil::stylePlot(m_hist.at({key, samp}).get(), *iColor, 1., 0, 21 + std::distance(std::begin(v_kColor), iColor), 1.5, 1, 2);
+    FitUtil::stylePlot(m_ratio.at({key, samp}).get(), *iColor, 1., 0, 21 + std::distance(std::begin(v_kColor), iColor), 1.5, 1, 2);
     leg->AddEntry(m_hist.at({key, samp}).get(), std::get<2>(ksl).c_str(), "lp");
 
     iColor = std::next(iColor);
   }
 
-  FitUtil::stylePlot(m_hist.at({dataName, Sample::all}), kBlack, 1., 0, 20, 1.5, 1, 2);
-  FitUtil::stylePlot(m_ratio.at({dataName, Sample::all}), kBlack, 1., 0, 20, 1.5, 1, 2);
+  FitUtil::stylePlot(m_hist.at({dataName, Sample::all}).get(), kBlack, 1., 0, 20, 1.5, 1, 2);
+  FitUtil::stylePlot(m_ratio.at({dataName, Sample::all}).get(), kBlack, 1., 0, 20, 1.5, 1, 2);
 
   // just to ensure data always comes last in legend
   const auto idat = std::find_if(std::begin(vt_keySampleLegend), std::end(vt_keySampleLegend), 
@@ -356,15 +369,15 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
     const double rOffset = (useCov) ? 0.37 : 0.37, rTitle = (useCov) ? 0.108 : 0.121;
 
     if (noRatio) {
-      FitUtil::axisPlot(m_hist.at({key, samp}), 
+      FitUtil::axisPlot(m_hist.at({key, samp}).get(), 
                         histMin, histMax, yLabel, 0.043, 1.21, 0.037, 0., 0., xLabel, 0.043, 1.11, 0.037);
-      FitUtil::axisPlot(m_ratio.at({key, samp}), 
+      FitUtil::axisPlot(m_ratio.at({key, samp}).get(), 
                         ratioMin, ratioMax, rLabel, 0.121, 0.41, 0.093, 0., 0., xLabel, 0.131, 0.71, 0.107);
     }
     else {
-      FitUtil::axisPlot(m_hist.at({key, samp}), 
+      FitUtil::axisPlot(m_hist.at({key, samp}).get(), 
                         histMin, histMax, yLabel, 0.059, 0.73, 0.047, 0., 0., xLabel, 0.037, 1.15, 0.033);
-      FitUtil::axisPlot(m_ratio.at({key, samp}), 
+      FitUtil::axisPlot(m_ratio.at({key, samp}).get(), 
                         ratioMin, ratioMax, rLabel, rTitle, rOffset, 0.093, 0., 0., xLabel, 0.131, 0.71, 0.107);
     }
   }
@@ -395,11 +408,11 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
 
     txt.SetTextSize(0.039);
 
-    FitUtil::styleLegend(leg, 2, 0, 0, 42, 0.037, "");
-    //FitUtil::putLegend(leg, 0.555, 0.955, 0.615, 0.875); // top right
-    //FitUtil::putLegend(leg, 0.135, 0.615, 0.615, 0.875); // top left
-    //FitUtil::putLegend(leg, 0.455, 0.955, 0.135, 0.395); // bottom right
-    FitUtil::putLegend(leg, 0.135, 0.615, 0.135, 0.395); // bottom left
+    FitUtil::styleLegend(leg.get(), 2, 0, 0, 42, 0.037, "");
+    //FitUtil::putLegend(leg.get(), 0.555, 0.955, 0.615, 0.875); // top right
+    //FitUtil::putLegend(leg.get(), 0.135, 0.615, 0.615, 0.875); // top left
+    //FitUtil::putLegend(leg.get(), 0.455, 0.955, 0.135, 0.395); // bottom right
+    FitUtil::putLegend(leg.get(), 0.135, 0.615, 0.135, 0.395); // bottom left
 
     if (drawLogY) can->SetLogy();
 
@@ -429,10 +442,10 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
 
     txt.SetTextSize(0.051);
 
-    FitUtil::styleLegend(leg, 2, 0, 0, 42, 0.041, legHeader.c_str());
-    //FitUtil::putLegend(leg, 0.555, 0.955, 0.615, 0.875); // top right
-    FitUtil::putLegend(leg, 0.115, 0.615, 0.615, 0.875); // top left
-    //FitUtil::putLegend(leg, 0.455, 0.955, 0.055, 0.315); // bottom right
+    FitUtil::styleLegend(leg.get(), 2, 0, 0, 42, 0.041, legHeader.c_str());
+    //FitUtil::putLegend(leg.get(), 0.555, 0.955, 0.615, 0.875); // top right
+    FitUtil::putLegend(leg.get(), 0.115, 0.615, 0.615, 0.875); // top left
+    //FitUtil::putLegend(leg.get(), 0.455, 0.955, 0.055, 0.315); // bottom right
 
     if (drawLogY) pad1->SetLogy();
 
@@ -662,8 +675,8 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
 
     t_cMat.close();
 
-    FitUtil::stylePlot(h_cMat, kBlack, 1., 0, 20, 1.5, 1, 1); // 3rd last arg is marker size, affects text size too...
-    FitUtil::axisPlot(h_cMat, 0., 0., "Column", 0.043, 1.11, 0.037, 0., 0., "Row", 0.043, 1.11, 0.037);
+    FitUtil::stylePlot(h_cMat.get(), kBlack, 1., 0, 20, 1.5, 1, 1); // 3rd last arg is marker size, affects text size too...
+    FitUtil::axisPlot(h_cMat.get(), 0., 0., "Column", 0.043, 1.11, 0.037, 0., 0., "Row", 0.043, 1.11, 0.037);
 
     // apply style - reminder: palette with dark colors in one end likely looks bad for matrices with elements of both sign
     FitUtil::setH2Style();
@@ -1131,7 +1144,7 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
   // declare here things that are gonna be applicable for all anyway
   const std::array<std::string, 2> a_sampLeg = {" (all)", " (linear)"};
-  const std::array<int, 2> a_sampStyL = {2, 4};
+  const std::array<int, 2> a_sampStyL = {1, 2};
   const std::array<double, 2> a_zero = {0., 0.};
   const std::array<double, 2> a_vPnt = {0., 8.};
   const std::array<double, 2> a_vErrD = {0., 4.};
@@ -1140,7 +1153,7 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
   // nBin - (1 for shape bin drop) + (1 if hybrid has rate) - nOp
   const int iXs = (statMode == Stat::xsec) ? 0 : 1;
   const int nDoF = v_rawBin.size() - 1 + v_rawBin.empty()
-    - (fitMode == Fit::shape)
+    - ((fitMode == Fit::shape) * int(shapeSum))
     + (fitMode == Fit::hybrid and m_binContent.at({dataName, Sample::all}).at(iXs).at(0) > 0.)
     - 1;
 
@@ -1241,12 +1254,14 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
       // and make the graph
       ag_dChi2.at(iSamp) = std::make_unique<TGraph>(av_opVal.at(iSamp).size(), av_opVal.at(iSamp).data(), av_dChi2.at(iSamp).data());
-      FitUtil::stylePlot(ag_dChi2.at(iSamp), kBlack, 1., 0, 20, 1.5, a_sampStyL.at(iSamp), 2);
-      FitUtil::axisPlot(ag_dChi2.at(iSamp), 
+      FitUtil::stylePlot(ag_dChi2.at(iSamp).get(), kBlack, 1., 0, 20, 1.5, a_sampStyL.at(iSamp), 2);
+      FitUtil::axisPlot(ag_dChi2.at(iSamp).get(), 
                         yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
                         xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
       ag_dChi2.at(iSamp)->SetName((opName + "_" + toStr(samp)).c_str());
       ag_dChi2.at(iSamp)->SetTitle("");
+
+      leg->AddEntry(ag_dChi2.at(iSamp).get(), (opLeg + a_sampLeg.at(iSamp)).c_str(), "l");
 
       // also prepare the stuff for 2 and 1 sigma bands
       // threshold is dChi2 containing 1 and 2 sigma for chi2 with 1 ndf (since we're fitting 1 op)
@@ -1308,8 +1323,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
         // guiding line graph
         ag_sigma.at(iSamp).at(0) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
                                                                        a_zero.data(), a_zero.data(), a_zero.data(), a_zero.data());
-        FitUtil::stylePlot(ag_sigma.at(iSamp).at(0), kBlack, 1., 0, 20, 1.5, 8, 2);
-        FitUtil::axisPlot(ag_sigma.at(iSamp).at(0), 
+        FitUtil::stylePlot(ag_sigma.at(iSamp).at(0).get(), kBlack, 1., 0, 20, 1.5, 8, 2);
+        FitUtil::axisPlot(ag_sigma.at(iSamp).at(0).get(), 
                           yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
                           xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
         ag_sigma.at(iSamp).at(0)->SetName((opName + "_sigma0_" + toStr(samp)).c_str());
@@ -1318,8 +1333,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
         // 1 sigma graph
         ag_sigma.at(iSamp).at(1) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
                                                                        a_1SigD.data(), a_1SigU.data(), a_vErrD.data(), a_vErrU.data());
-        FitUtil::stylePlot(ag_sigma.at(iSamp).at(1), kGreen + 1, 1., 1001, 0, 1.5, 1, 2);
-        FitUtil::axisPlot(ag_sigma.at(iSamp).at(1), 
+        FitUtil::stylePlot(ag_sigma.at(iSamp).at(1).get(), kGreen + 1, 1., 1001, 0, 1.5, 1, 2);
+        FitUtil::axisPlot(ag_sigma.at(iSamp).at(1).get(), 
                           yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
                           xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
         ag_sigma.at(iSamp).at(1)->SetName((opName + "_sigma1_" + toStr(samp)).c_str());
@@ -1329,10 +1344,10 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
           // 2 sigma graph
           ag_sigma.at(iSamp).at(2) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
                                                                          a_2SigD.data(), a_2SigU.data(), a_vErrD.data(), a_vErrU.data());
-          FitUtil::axisPlot(ag_sigma.at(iSamp).at(2), 
+          FitUtil::axisPlot(ag_sigma.at(iSamp).at(2).get(), 
                             yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
                             xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
-          FitUtil::stylePlot(ag_sigma.at(iSamp).at(2), kOrange, 1., 1001, 0, 1.5, 1, 2);
+          FitUtil::stylePlot(ag_sigma.at(iSamp).at(2).get(), kOrange, 1., 1001, 0, 1.5, 1, 2);
           ag_sigma.at(iSamp).at(2)->SetName((opName + "_sigma2_" + toStr(samp)).c_str());
           ag_sigma.at(iSamp).at(2)->SetTitle("");
 
@@ -1343,9 +1358,6 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
         if (samp == v_sample.front())
           leg->AddEntry(ag_sigma.at(iSamp).at(1).get(), ("#pm 1#sigma" + a_sampLeg.at(iSamp)).c_str(), "f");
       }
-
-      if (ag_dChi2.at(iSamp) != nullptr)
-        leg->AddEntry(ag_dChi2.at(iSamp).get(), (opLeg + a_sampLeg.at(iSamp)).c_str(), "l");
     }
 
     FitUtil::setH1Style();
@@ -1364,16 +1376,16 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
     can->cd();
 
-    FitUtil::styleLegend(leg, 1, 0, 0, 42, 0.041, "");
-    //FitUtil::putLegend(leg, 0.685, 0.945, 0.655, 0.935); // top right
-    //FitUtil::putLegend(leg, 0.125, 0.385, 0.655, 0.935); // top left
-    FitUtil::putLegend(leg, 0.685, 0.945, 0.155, 0.435); // bottom right
+    FitUtil::styleLegend(leg.get(), 1, 0, 0, 42, 0.041, "");
+    //FitUtil::putLegend(leg.get(), 0.685, 0.945, 0.655, 0.935); // top right
+    //FitUtil::putLegend(leg.get(), 0.125, 0.385, 0.655, 0.935); // top left
+    FitUtil::putLegend(leg.get(), 0.685, 0.945, 0.155, 0.435); // bottom right
 
     ag_dChi2.at(static_cast<int>(v_sample.front()))->Draw("a c");
     leg->Draw();
-    txt.DrawLatexNDC(0.131, 0.923, FitUtil::topLeft.c_str());
-    txt.DrawLatexNDC(0.461, 0.923, topMid.c_str());
-    txt.DrawLatexNDC(0.671, 0.923, FitUtil::topRight.c_str());
+    txt.DrawLatexNDC(0.131, 0.915, FitUtil::topLeft.c_str());
+    txt.DrawLatexNDC(0.461, 0.915, topMid.c_str());
+    txt.DrawLatexNDC(0.661, 0.923, FitUtil::topRight.c_str());
 
     if (drawSig1) {
       if (drawSig2)
@@ -1456,7 +1468,7 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
   // nBin - (1 for shape bin drop) + (1 if hybrid has rate) - nOp
   const int iXs = (statMode == Stat::xsec) ? 0 : 1;
   const int nDoF = v_rawBin.size() - 1 + v_rawBin.empty()
-    - (fitMode == Fit::shape)
+    - ((fitMode == Fit::shape) * int(shapeSum))
     + (fitMode == Fit::hybrid and m_binContent.at({dataName, Sample::all}).at(iXs).at(0) > 0.)
     - 2;
 
@@ -1534,8 +1546,8 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       // make the best fit graph
       const std::vector<double> v_op1Sig0(1, opMin.at(0)), v_op2Sig0(1, opMin.at(1));
       ag_sigma0.at(iSamp) = std::make_unique<TGraph>(1, v_op2Sig0.data(), v_op1Sig0.data());
-      FitUtil::stylePlot(ag_sigma0.at(iSamp), a_sampCol0.at(iSamp), 1., 0, a_sampStyM.at(iSamp), 2.5, a_sampStyL.at(iSamp), 3);
-      FitUtil::axisPlot(ag_sigma0.at(iSamp), 
+      FitUtil::stylePlot(ag_sigma0.at(iSamp).get(), a_sampCol0.at(iSamp), 1., 0, a_sampStyM.at(iSamp), 2.5, a_sampStyL.at(iSamp), 3);
+      FitUtil::axisPlot(ag_sigma0.at(iSamp).get(), 
                         op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
                         op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
       ag_sigma0.at(iSamp)->SetName((op1Name + "_" + op2Name + "_sigma0_" + toStr(samp)).c_str());
@@ -1655,16 +1667,16 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       }
 
       ag_sigma1.at(iSamp) = std::make_unique<TGraph>(v_op1Sig1.size(), v_op2Sig1.data(), v_op1Sig1.data());
-      FitUtil::stylePlot(ag_sigma1.at(iSamp), a_sampCol1.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
-      FitUtil::axisPlot(ag_sigma1.at(iSamp), 
+      FitUtil::stylePlot(ag_sigma1.at(iSamp).get(), a_sampCol1.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
+      FitUtil::axisPlot(ag_sigma1.at(iSamp).get(), 
                         op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
                         op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
       ag_sigma1.at(iSamp)->SetName((op1Name + "_" + op2Name + "_sigma1_" + toStr(samp)).c_str());
       ag_sigma1.at(iSamp)->SetTitle("");
 
       ag_sigma2.at(iSamp) = std::make_unique<TGraph>(v_op1Sig2.size(), v_op2Sig2.data(), v_op1Sig2.data());
-      FitUtil::stylePlot(ag_sigma2.at(iSamp), a_sampCol2.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
-      FitUtil::axisPlot(ag_sigma2.at(iSamp), 
+      FitUtil::stylePlot(ag_sigma2.at(iSamp).get(), a_sampCol2.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
+      FitUtil::axisPlot(ag_sigma2.at(iSamp).get(), 
                         op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
                         op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
       ag_sigma2.at(iSamp)->SetName((op1Name + "_" + op2Name + "_sigma2_" + toStr(samp)).c_str());
@@ -1674,16 +1686,16 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
     // and now we make the line to guide the eye along 0 in y and x
     std::array<std::unique_ptr<TGraph>, 2> ag_zero = {nullptr, nullptr};
     ag_zero.at(0) = std::make_unique<TGraph>(2, op2Range.data(), a_zero.data());
-    FitUtil::stylePlot(ag_zero.at(0), kGray + 2, 1., 0, 0, 2.5, 1, 1);
-    FitUtil::axisPlot(ag_zero.at(0), 
+    FitUtil::stylePlot(ag_zero.at(0).get(), kGray + 2, 1., 0, 0, 2.5, 1, 1);
+    FitUtil::axisPlot(ag_zero.at(0).get(), 
                       op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
                       op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
     ag_zero.at(0)->SetName((op1Name + "_" + op2Name + "_xX_y0").c_str());
     ag_zero.at(0)->SetTitle("");
 
     ag_zero.at(1) = std::make_unique<TGraph>(2, a_zero.data(), op1Range.data());
-    FitUtil::stylePlot(ag_zero.at(1), kGray + 2, 1., 0, 0, 2.5, 1, 1);
-    FitUtil::axisPlot(ag_zero.at(1), 
+    FitUtil::stylePlot(ag_zero.at(1).get(), kGray + 2, 1., 0, 0, 2.5, 1, 1);
+    FitUtil::axisPlot(ag_zero.at(1).get(), 
                       op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
                       op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
     ag_zero.at(1)->SetName((op1Name + "_" + op2Name + "_x0_yY").c_str());
@@ -1704,10 +1716,10 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
 
     can->cd();
 
-    FitUtil::styleLegend(leg, 1, 0, 0, 42, 0.041, "");
-    //FitUtil::putLegend(leg, 0.685, 0.945, 0.755, 0.935); // top right
-    //FitUtil::putLegend(leg, 0.125, 0.385, 0.755, 0.935); // top left
-    FitUtil::putLegend(leg, 0.685, 0.945, 0.155, 0.335); // bottom right
+    FitUtil::styleLegend(leg.get(), 1, 0, 0, 42, 0.041, "");
+    //FitUtil::putLegend(leg.get(), 0.685, 0.945, 0.755, 0.935); // top right
+    //FitUtil::putLegend(leg.get(), 0.125, 0.385, 0.755, 0.935); // top left
+    FitUtil::putLegend(leg.get(), 0.685, 0.945, 0.155, 0.335); // bottom right
 
     ag_sigma0.at(static_cast<int>(v_sample.front()))->Draw("a p");
     leg->Draw();
@@ -1832,7 +1844,7 @@ bool EFTFitter::checkInputBin(const std::unique_ptr<TH1D> &hist) const
 {
   // compare the binning against the known template binning (obtained at first feeding into the map)
   if (fitMode != Fit::hybrid)
-    return (hist->GetNbinsX() == v_rawBin.size() - 1 and FitUtil::extractBin( hist ) == v_rawBin);
+    return (hist->GetNbinsX() == v_rawBin.size() - 1 and FitUtil::extractBin( hist.get() ) == v_rawBin);
   else {
     // yes Fit::hybrid is AWFUL
     std::vector<std::array<double, 2>> v_pre = FitUtil::extractContentError(hist);
@@ -2277,7 +2289,7 @@ void FitUtil::setH2Style()
 
 
 
-std::vector<double> FitUtil::extractBin(const std::unique_ptr<TH1D> &hist)
+std::vector<double> FitUtil::extractBin(TH1 *hist)
 {
   const int nBin = hist->GetNbinsX();
   std::vector<double> v_bin = { hist->GetXaxis()->GetBinLowEdge(1) };
@@ -2289,7 +2301,7 @@ std::vector<double> FitUtil::extractBin(const std::unique_ptr<TH1D> &hist)
 
 
 
-std::vector<std::array<double, 2>> FitUtil::extractContentError(const std::unique_ptr<TH1D> &hist)
+std::vector<std::array<double, 2>> FitUtil::extractContentError(TH1 *hist)
 {
   const int nBin = hist->GetNbinsX();
   std::vector<std::array<double, 2>> v_conErr;
@@ -2302,7 +2314,7 @@ std::vector<std::array<double, 2>> FitUtil::extractContentError(const std::uniqu
 
 
 template <typename Plot> 
-void FitUtil::stylePlot(const std::unique_ptr<Plot> &plot, 
+void FitUtil::stylePlot(Plot *plot, 
                         const int useColor, const double colorAlpha, const int fillStyle, 
                         const int markStyle, const double markSize, 
                         const int lineStyle, const int lineWidth, 
@@ -2322,7 +2334,7 @@ void FitUtil::stylePlot(const std::unique_ptr<Plot> &plot,
 
 
 template <typename Plot> 
-void FitUtil::axisPlot(const std::unique_ptr<Plot> &plot,
+void FitUtil::axisPlot(Plot *plot,
                        const double yMin, const double yMax,
                        const std::string &yTxt, const double ySiz, const double yOff, const double yLab,
                        const double xMin, const double xMax,
@@ -2376,7 +2388,7 @@ void FitUtil::axisRange(TH1 &plot,
 
 
 
-void FitUtil::styleLegend(const std::unique_ptr<TLegend> &leg, 
+void FitUtil::styleLegend(TLegend *leg, 
                           const int nColumn, const int fillColor, const int borderSize, 
                           const int txtFont, const double txtSize, 
                           const std::string &legHead)
@@ -2391,7 +2403,7 @@ void FitUtil::styleLegend(const std::unique_ptr<TLegend> &leg,
 
 
 
-void FitUtil::putLegend(const std::unique_ptr<TLegend> &leg, const double x1, const double x2, const double y1, const double y2)
+void FitUtil::putLegend(TLegend *leg, const double x1, const double x2, const double y1, const double y2)
 {
   leg->SetX1(x1); leg->SetX2(x2);
   leg->SetY1(y1); leg->SetY2(y2);

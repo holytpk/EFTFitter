@@ -276,12 +276,13 @@ namespace FitUtil {
   /// rng for any random stuff
   static std::mt19937_64 rng(std::random_device{}());
 
-  /// standard text on plots
+  /// standard text on plots (in any case can always re-plot in external macros)
   const std::string topLeft = ""; // "#bf{CMS} #it{Private Work}"; 
-  const std::string topRight = ""; // "35.9 /fb @ 13 TeV";
+  //const std::string topRight = ""; // "35.9 /fb @ 13 TeV";
+
   /// for publications
-  //const std::string topLeft = "#bf{CMS}"; 
-  //const std::string topRight = "35.9 fb^{-1} (13 TeV)";
+  //const std::string topLeft = "#scale[1.2]{#bf{CMS}}"; 
+  const std::string topRight = "35.9 fb^{-1} (13 TeV)";
 
   /// style of TH1 - reproducing the TDRStyle macro
   void setH1Style();
@@ -290,20 +291,20 @@ namespace FitUtil {
   void setH2Style();
 
   /// extract the binning used in a hist
-  std::vector<double> extractBin(const std::unique_ptr<TH1D> &hist);
+  std::vector<double> extractBin(TH1 *hist);
 
   /// extract the bin contents and errors of a hist (assumes symmetrical errors)
-  std::vector<std::array<double, 2>> extractContentError(const std::unique_ptr<TH1D> &hist);
+  std::vector<std::array<double, 2>> extractContentError(TH1 *hist);
 
   /// styling of hist, graph
-  template <typename Plot> void stylePlot(const std::unique_ptr<Plot> &plot, 
+  template <typename Plot> void stylePlot(Plot *plot, 
                                           const int useColor, const double colorAlpha, const int fillStyle, 
                                           const int markStyle, const double markSize, 
                                           const int lineStyle, const int lineWidth, 
                                           const std::string &mainTitle = "");
 
   /// range and labeling of y, x axes
-  template <typename Plot> void axisPlot(const std::unique_ptr<Plot> &plot,
+  template <typename Plot> void axisPlot(Plot *plot,
                                          const double yMin, const double yMax,
                                          const std::string &yTxt, const double ySiz, const double yOff, const double yLab,
                                          const double xMin, const double xMax,
@@ -317,12 +318,12 @@ namespace FitUtil {
                  const double yMin, const double yMax, const double xMin, const double xMax);
 
   /// styling, positioning of plot legend
-  void styleLegend(const std::unique_ptr<TLegend> &leg, 
+  void styleLegend(TLegend *leg, 
                    const int nColumn, const int fillColor, const int borderSize, 
                    const int txtFont, const double txtSize, 
                    const std::string &legHead = "");
 
-  void putLegend(const std::unique_ptr<TLegend> &leg, const double x1, const double x2, const double y1, const double y2);
+  void putLegend(TLegend *leg, const double x1, const double x2, const double y1, const double y2);
 }
 
 
