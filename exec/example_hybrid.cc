@@ -59,10 +59,10 @@ int main() {
   //      return v_tmpC;
   //}));
 
-  // for real data one can choose either to use addRawInput() and transform the template with predefined function
-  // or directly add using addHybridData() assuming it's already transformed matching the desired format
+  // for real data one directly adds using addHybridData() assuming it's already transformed matching the desired format
+  // or optionally supply a function to transform it, which is not necessarily the same as in setHybridTransformation()
+  // all that matters is that they both give a bin content of the same format
   // useful when data transformation can't be expressed simply - eg asymmetry accounting bin correlations which aren't needed for MC
-  // an optional arg to further transform just the data bin content can be provided
   // note that this method has no consistency check whatsoever, so user needs to be sure that it is consistent
   //eft.addHybridData(input_dir + "unfolded_data.root", histName, {0., 0.}, Stat::xsec);
 
