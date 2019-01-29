@@ -38,7 +38,17 @@ inline bool replace(std::string &str, const std::string &from, const std::string
 
 
 /// number to string; to_string tend to give more precision than needed
-template <typename Number> std::string toStr(Number inNo) { std::ostringstream outStr; outStr << inNo; return outStr.str(); }
+template <typename Number> std::string toStr(Number inNo, const int prec = -1, const bool fixed = false) 
+{
+  std::ostringstream outStr;
+  if (fixed)
+    outStr << std::fixed;
+  if (prec > 0)
+    outStr << std::setprecision(prec);
+
+  outStr << inNo; 
+  return outStr.str(); 
+}
 
 
 
