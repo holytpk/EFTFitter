@@ -81,7 +81,7 @@ void EFTFitter::addRawInput(const std::string &keyName, const Sample sampleType,
     else {
       // Fit::hybrid, so just prepare a dummy binContent to make a binning of just integer interval
       // all that matters is that interval length is what one gets out of f_hybridTransform
-      std::vector<std::array<double, 2>> v_pre = FitUtil::extractContentError(hist);
+      std::vector<std::array<double, 2>> v_pre = FitUtil::extractContentError(hist.get());
       v_pre.push_back({0., 0.});
       v_pre.push_back({0., 0.});
 
@@ -133,7 +133,7 @@ void EFTFitter::addRawInput(const std::string &keyName, const Sample sampleType,
   else if (sumStat == Stat::xsec)
     v_binContent = { {hsum, herr}, {hsum * intLumi, herr * intLumi} };
 
-  const std::vector<std::array<double, 2>> v_binNorm = FitUtil::extractContentError(hist);
+  const std::vector<std::array<double, 2>> v_binNorm = FitUtil::extractContentError(hist.get());
   v_binContent.insert(std::end(v_binContent), std::begin(v_binNorm), std::end(v_binNorm));
 
   // if element is already present, erase or add to it as requested
@@ -241,7 +241,7 @@ void EFTFitter::addHybridData(const std::string &fileName, const std::string &hi
     v_binContent = { {xsec, xerr}, {xsec * intLumi, xerr * intLumi} };
   }
 
-  const std::vector<std::array<double, 2>> v_binNorm = FitUtil::extractContentError(hist);
+  const std::vector<std::array<double, 2>> v_binNorm = FitUtil::extractContentError(hist.get());
   v_binContent.insert(std::end(v_binContent), std::begin(v_binNorm), std::end(v_binNorm));
 
   // and in it goes - mark that it has been done
@@ -565,7 +565,7 @@ void EFTFitter::readCovMatRoot(const std::string &keyMat, const std::string &fil
   // if bin index range is invalid (like the default), then assume the hist matches raw inputs
   std::vector<int> v_index;
   if (!v_endbin.empty() and std::all_of(std::begin(v_endbin), std::end(v_endbin), 
-                                        [] (const auto &endbin) { return endbin.at(1) >= endbin.at(0);})) {
+                                        [] (const auto &endbin) {return endbin.at(1) >= endbin.at(0);})) {
     for (const auto &endbin : v_endbin) {
       v_index.push_back(endbin.at(0));
       fillInterval(v_index, endbin.at(0), endbin.at(1), 1);
@@ -798,7 +798,8 @@ void EFTFitter::prepareInterpolationBase()
 
   // these are gonna pop up often
   // std::pow not as efficient for integer powers, so yeah
-  const int nBin = std::begin(m_interInput)->second.size();
+  const int nBin = (std::begin(m_binContent)->first.first != dataName) ? std::begin(m_binContent)->second.size() 
+    : std::next(std::begin(m_binContent))->second.size();
   const int iXs = (statMode == Stat::xsec) ? 0 : 1;
   const double sqLambda = eftLambda * eftLambda; 
   const double quLambda = sqLambda * sqLambda;
@@ -1847,7 +1848,7 @@ bool EFTFitter::checkInputBin(const std::unique_ptr<TH1D> &hist) const
     return (hist->GetNbinsX() == v_rawBin.size() - 1 and FitUtil::extractBin( hist.get() ) == v_rawBin);
   else {
     // yes Fit::hybrid is AWFUL
-    std::vector<std::array<double, 2>> v_pre = FitUtil::extractContentError(hist);
+    std::vector<std::array<double, 2>> v_pre = FitUtil::extractContentError(hist.get());
     v_pre.push_back({0., 0.});
     v_pre.push_back({0., 0.});
 
@@ -1932,7 +1933,8 @@ std::vector<std::array<double, 2>> EFTFitter::interpolateOpValue(const std::stri
                             "Ensure prepareInterpolationBase() has been called!!!");
 
   // these are gonna pop up often
-  const int nBin = std::begin(m_binContent)->second.size();
+  const int nBin = (std::begin(m_binContent)->first.first != dataName) ? 
+    std::begin(m_binContent)->second.size() : std::next(std::begin(m_binContent))->second.size();
   const int iXs = (statMode == Stat::xsec) ? 0 : 1;
   const double sqLambda = eftLambda * eftLambda; 
   const double quLambda = sqLambda * sqLambda;
@@ -1940,7 +1942,7 @@ std::vector<std::array<double, 2>> EFTFitter::interpolateOpValue(const std::stri
   // ok let's start interpolating - first prepare the bin contents starting from SM
   const auto v_xs_op0 = std::find_if(std::begin(m_binContent), std::end(m_binContent), [this] (const auto &p) {
       const auto smOp = extractValue( this->parseOpFromKey(p.first.first) );
-      return std::all_of(std::begin(smOp), std::end(smOp), [] (const auto &op) {return op == 0.;});
+      return !smOp.empty() and std::all_of(std::begin(smOp), std::end(smOp), [] (const auto &op) {return op == 0.;});
     });
 
   // get the op-coeff set represented by this key
