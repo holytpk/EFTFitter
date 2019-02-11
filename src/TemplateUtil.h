@@ -158,6 +158,15 @@ std::vector<Value> extractValueIf(const std::map<Key, Value> &map, Predicate pre
 
 
 
+/// this overload is for printAll to correctly print pair-types
+template <typename One, typename Two> std::ostream& operator<<(std::ostream& out, const std::pair<One, Two> &pair)
+{
+  out << "[ " << pair.first << " :: " << pair.second << " ]";
+  return out;
+}
+
+
+
 /// check if a given type is printable; don't really know how to use though - if (...) in printAll and/or << didn't work :(
 /// credits Tony Delroy @ https://stackoverflow.com/questions/22758291/how-can-i-detect-if-a-type-can-be-streamed-to-an-stdostream
 template <typename T> class is_streamable {
@@ -165,18 +174,9 @@ template <typename T> class is_streamable {
   template <typename U> static auto test(const U* u) -> decltype(std::cout << *u);
   static auto test(...) -> std::false_type;
 
-public:
-  enum { value = !std::is_same<decltype(test( (T*) 0 )), std::false_type>::value };
+  public:
+    enum { value = !std::is_same<decltype(test( (T*) 0 )), std::false_type>::value };
 };
-
-
-
-/// this overload is for printAll to correctly print pair-types
-template <typename One, typename Two> std::ostream& operator<<(std::ostream& out, const std::pair<One, Two> &pair)
-{
-  out << "[ " << pair.first << " :: " << pair.second << " ]";
-  return out;
-}
 
 
 
