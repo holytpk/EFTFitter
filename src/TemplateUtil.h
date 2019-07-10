@@ -37,6 +37,22 @@ inline bool replace(std::string &str, const std::string &from, const std::string
 }
 
 
+
+/// count occurences of substrings
+/// credit https://stackoverflow.com/questions/22489073/counting-the-number-of-occurrences-of-a-string-within-a-string
+inline int count_substring(const std::string &str, const std::string &sub) {
+  int nSub = 0;
+  std::string::size_type iSub = 0;
+  while ((iSub = str.find(sub, iSub)) != std::string::npos) {
+    ++nSub;
+    iSub += sub.length();
+  }
+
+  return nSub;
+}
+
+
+
 /// number to string; to_string tend to give more precision than needed
 template <typename Number> std::string toStr(Number inNo, const int prec = -1, const bool fixed = false) 
 {

@@ -1428,7 +1428,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
 void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
                            std::array<std::pair<std::string, std::array<double, 2>>, 2>> &mt_opPair,
-                           const std::string &plotName, const std::vector<Sample> &v_sample) const
+                           const std::string &plotName, const std::vector<Sample> &v_sample,
+                           const double &dChi2FracScan) const
 {
   if (m_fitChi2.empty())
     throw std::logic_error( "This method shouldn't be called before the computeFitChi2() method!!" );
@@ -1458,10 +1459,10 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
   // declare here things that are gonna be applicable for all anyway
   const std::array<std::string, 2> a_sampLeg = {" (all)", " (lin)"};
   const std::array<int, 2> a_sampCol0 = {kPink - 1, kAzure - 1};
-  const std::array<int, 2> a_sampCol1 = {kGreen + 1, kYellow + 1};
-  const std::array<int, 2> a_sampCol2 = {kOrange, kTeal};
-  const std::array<int, 2> a_sampStyF = {1001, 1001}; // 0 means no fill, 1001 means full fill
-  const std::array<int, 2> a_sampStyL = {1, 4};
+  const std::array<int, 2> a_sampCol1 = {kPink - 3, kAzure - 3}; // brazil is kGreen + 1
+  const std::array<int, 2> a_sampCol2 = {kPink - 4, kAzure - 4}; // and kOrange
+  const std::array<int, 2> a_sampStyF = {0, 0}; // 0 means no fill, 1001 means full fill
+  const std::array<int, 2> a_sampStyL = {1, 1};
   const std::array<int, 2> a_sampStyM = {kFullCrossX, kOpenCrossX};
   const std::array<std::string, 2> a_sampOpt = {"lf", "lf"};
   const std::array<double, 2> a_zero = {0., 0.};
@@ -1567,10 +1568,15 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       std::vector<std::array<double, 2>> v_opSig1, v_opSig2;
       for (int iD = 0; iD < av_dChi2.at(iSamp).size(); ++iD) {
         if (av_dChi2.at(iSamp).at(iD) <= dChi2Sig2) {
-          v_opSig2.push_back(av_opVal.at(iSamp).at(iD));
+          // the > cut is there because we're interested only in the boundary for plotting
+          // and removing points that are certainly not the boundary makes things faster
+          const bool scanSig1 = (dChi2FracScan == 1. or av_dChi2.at(iSamp).at(iD) > (1. - dChi2FracScan) * dChi2Sig1);
+          const bool scanSig2 = (dChi2FracScan == 1. or av_dChi2.at(iSamp).at(iD) > (1. - dChi2FracScan) * dChi2Sig2);
 
-          if (av_dChi2.at(iSamp).at(iD) <= dChi2Sig1)
+          if (scanSig1 and av_dChi2.at(iSamp).at(iD) <= dChi2Sig1)
             v_opSig1.push_back(av_opVal.at(iSamp).at(iD));
+          else if (scanSig2)
+            v_opSig2.push_back(av_opVal.at(iSamp).at(iD));
         }
       }
 
@@ -1580,12 +1586,15 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       // we need it to be a unary predicate in order for it to be usable with remove_if
       // and so the threshold is put outside
       // similarly the function needs to be here as it refers to av_opVal.at(iSamp) etc which is scoped here
+      // probably can be made faster eg by keeping the points that are neighbors along the edge with the first edge point
+      // but seems circular in that neighbors along edge is known only when the edge is known hmm...
       const int nPnt = av_opVal.at(iSamp).size();
       double dChi2Cut = 0.;
       const auto f_isNotEdgePnt = [&] (const auto &opPnt) {
         // exploit the fact that find_if returns the 1st iterator to element giving true
         // and that the points are sorted lexicographically
         // forward search for the hi-neighbor
+        // FIXME gain speed up by using only 1 loop rather than 4
         const auto itHi1 = std::find_if(std::begin(av_opVal.at(iSamp)), std::end(av_opVal.at(iSamp)), 
                                         [&] (const auto &opP) {
                                           return opP.at(1) == opPnt.at(1) and opP.at(0) > opPnt.at(0);
@@ -1652,9 +1661,10 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       std::cout << "Done. " << v_opSig2.size() << " edge points remain in 2 sigma contour." << std::endl;
       f_sortNearestNeighbor(v_opSig2);
 
-      // insert at back the first point so as to have a closed shape
+      /*/ insert at back the first point so as to have a closed shape
       v_opSig1.push_back(v_opSig1.front());
       v_opSig2.push_back(v_opSig2.front());
+      */
 
       // ok now we split them to be passed to the graph
       std::vector<double> v_op1Sig1, v_op2Sig1, v_op1Sig2, v_op2Sig2;
@@ -1668,7 +1678,7 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       }
 
       ag_sigma1.at(iSamp) = std::make_unique<TGraph>(v_op1Sig1.size(), v_op2Sig1.data(), v_op1Sig1.data());
-      FitUtil::stylePlot(ag_sigma1.at(iSamp).get(), a_sampCol1.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
+      FitUtil::stylePlot(ag_sigma1.at(iSamp).get(), a_sampCol1.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 4);
       FitUtil::axisPlot(ag_sigma1.at(iSamp).get(), 
                         op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
                         op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
@@ -1676,7 +1686,7 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       ag_sigma1.at(iSamp)->SetTitle("");
 
       ag_sigma2.at(iSamp) = std::make_unique<TGraph>(v_op1Sig2.size(), v_op2Sig2.data(), v_op1Sig2.data());
-      FitUtil::stylePlot(ag_sigma2.at(iSamp).get(), a_sampCol2.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 3);
+      FitUtil::stylePlot(ag_sigma2.at(iSamp).get(), a_sampCol2.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 4);
       FitUtil::axisPlot(ag_sigma2.at(iSamp).get(), 
                         op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
                         op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
@@ -1775,13 +1785,13 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
 
 void EFTFitter::clearContent(const int clearLevel)
 {
-  std::cout << "Clearing up contents (level " << clearLevel << ") of the current EFTFitter object..." << std::endl << std::endl;
+  std::cout << "Clearing up contents of the current EFTFitter object..." << std::endl << std::endl;
 
   m_fitChi2.clear();
-
-  if (clearLevel > 0) return;
-
   v_keyToFit.clear();
+
+  std::cout << "Chi2 values and corresponding keys cleared." << std::endl << std::endl;
+  if (clearLevel > 0) return;
 
   m_op1Eq1.clear();
   m_op2Eq1.clear();
@@ -1795,6 +1805,8 @@ void EFTFitter::clearContent(const int clearLevel)
   v_opName.clear();
   v_rawBin.clear();
   f_hybridTransform = nullptr;
+
+  std::cout << "All EFTFitter object content cleared." << std::endl << std::endl;
 }
 
 
