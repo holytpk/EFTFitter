@@ -75,6 +75,7 @@ class EFTFitter {
   /// if sumStat is Stat::count and normalizedSum value is not 0, lumi normalization is done (assuming MC template of weighted count)
   /// to not do lumi normalization just set normalizedSum value to 0 (its error is ignored anyway)
   /// Fit::shape acts like absolute, but of course only shape and shapeSum are used in fit
+  /// keyName assumes the syntax is op1_val1--op2_val2-- ... --opN_valN
   void addRawInput(const std::string &keyName, const Sample sampleType, 
                    const std::string &fileName, const std::string &histName, const std::string &sumName = "",
                    const int nRebin = 1, const std::array<double, 2> &normalizedSum = {0., 0.}, const Stat sumStat = Stat::count,
@@ -161,7 +162,7 @@ class EFTFitter {
   /// array is op1-op2 text (as to appear in axes), op1-op2 range to plot
   /// op1 will be on y-axis, op2 on x-axis
   /// dChi2FracScan is a way to remove some points from the edge scan when drawing the contours
-  /// only points within (1 - dChi2FracScan) * dChi2Cut < dChi2 < dChi2 cut will be kept for defining the contour 
+  /// only points within (1 - dChi2FracScan) * dChi2Cut < dChi2 < dChi2Cut will be kept for defining the contour 
   void draw2DChi2(const std::map<std::array<std::string, 2>, 
                   std::array<std::pair<std::string, std::array<double, 2>>, 2>> &mt_opPair,
                   const std::string &plotName, const std::vector<Sample> &v_sample = {Sample::all, Sample::linear},
