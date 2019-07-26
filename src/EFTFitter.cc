@@ -1626,7 +1626,7 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
 
         // get indices of the neighbors
         const int iHi1 = std::distance(std::begin(av_opVal.at(iSamp)), itHi1);
-        const int iHi2 = std::distance(std::begin(av_opVal.at(iSamp)), itHi1);
+        const int iHi2 = std::distance(std::begin(av_opVal.at(iSamp)), itHi2);
 
         // yes getting forward indices of reverse iterators is a bit weird
         const int iLo1 = nPnt - 1 - std::distance(std::rbegin(av_opVal.at(iSamp)), itLo1);
