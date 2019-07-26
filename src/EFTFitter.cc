@@ -1570,8 +1570,8 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
         if (av_dChi2.at(iSamp).at(iD) <= dChi2Sig2) {
           // the > cut is there because we're interested only in the boundary for plotting
           // and removing points that are certainly not the boundary makes things faster
-          const bool scanSig1 = (dChi2FracScan == 1. or av_dChi2.at(iSamp).at(iD) > (1. - dChi2FracScan) * dChi2Sig1);
-          const bool scanSig2 = (dChi2FracScan == 1. or av_dChi2.at(iSamp).at(iD) > (1. - dChi2FracScan) * dChi2Sig2);
+          const bool scanSig1 = (std::abs(dChi2FracScan) >= 1. or av_dChi2.at(iSamp).at(iD) > (1. - dChi2FracScan) * dChi2Sig1);
+          const bool scanSig2 = (std::abs(dChi2FracScan) >= 1. or av_dChi2.at(iSamp).at(iD) > (1. - dChi2FracScan) * dChi2Sig2);
 
           if (scanSig1 and av_dChi2.at(iSamp).at(iD) <= dChi2Sig1)
             v_opSig1.push_back(av_opVal.at(iSamp).at(iD));
@@ -1589,48 +1589,46 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       // probably can be made faster eg by keeping the points that are neighbors along the edge with the first edge point
       // but seems circular in that neighbors along edge is known only when the edge is known hmm...
       const int nPnt = av_opVal.at(iSamp).size();
+      bool prev3Neighbor = false;
       double dChi2Cut = 0.;
       const auto f_isNotEdgePnt = [&] (const auto &opPnt) {
-        // exploit the fact that find_if returns the 1st iterator to element giving true
-        // and that the points are sorted lexicographically
-        // forward search for the hi-neighbor
-        // FIXME gain speed up by using only 1 loop rather than 4
-        const auto itHi1 = std::find_if(std::begin(av_opVal.at(iSamp)), std::end(av_opVal.at(iSamp)), 
-                                        [&] (const auto &opP) {
-                                          return opP.at(1) == opPnt.at(1) and opP.at(0) > opPnt.at(0);
-                                        });
+        // exploit the fact that points are sorted lexicographically
+        // so loop finding the last low and first high neighbors
+        int iHi1 = -1, iHi2 = -1, iLo1 = -1, iLo2 = -1;
+        for (int iP = 0; iP < nPnt; ++iP) {
+          if (iHi1 != -1 and iHi2 != -1) break;
+          if (av_opVal.at(iSamp).at(iP).at(0) != opPnt.at(0) and av_opVal.at(iSamp).at(iP).at(1) != opPnt.at(1)) continue;
 
-        const auto itHi2 = std::find_if(std::begin(av_opVal.at(iSamp)), std::end(av_opVal.at(iSamp)), 
-                                        [&] (const auto &opP) {
-                                          return opP.at(0) == opPnt.at(0) and opP.at(1) > opPnt.at(1);
-                                        });
+          if (iHi1 == -1 and av_opVal.at(iSamp).at(iP).at(1) == opPnt.at(1)) {
+            if (av_opVal.at(iSamp).at(iP).at(0) < opPnt.at(0)) {
+              iLo1 = iP;
+              continue;
+            }
 
-        // while lo-neighbor requires a reverse search
-        const auto itLo1 = std::find_if(std::rbegin(av_opVal.at(iSamp)), std::rend(av_opVal.at(iSamp)), 
-                                        [&] (const auto &opP) {
-                                          return opP.at(1) == opPnt.at(1) and opP.at(0) < opPnt.at(0);
-                                        });
+            if (av_opVal.at(iSamp).at(iP).at(0) > opPnt.at(0)) {
+              iHi1 = iP;
+              continue;
+            }
+          }
 
-        const auto itLo2 = std::find_if(std::rbegin(av_opVal.at(iSamp)), std::rend(av_opVal.at(iSamp)), 
-                                        [&] (const auto &opP) {
-                                          return opP.at(0) == opPnt.at(0) and opP.at(1) < opPnt.at(1);
-                                        });
+          if (iHi2 == -1 and av_opVal.at(iSamp).at(iP).at(0) == opPnt.at(0)) {
+            if (av_opVal.at(iSamp).at(iP).at(1) < opPnt.at(1)) {
+              iLo2 = iP;
+              continue;
+            }
 
-        // check to ensure all neighbors are defined (if not, simply consider it not edge)
-        if (itHi1 == std::end(av_opVal.at(iSamp)) or itHi2 == std::end(av_opVal.at(iSamp)) or
-            itLo1 == std::rend(av_opVal.at(iSamp)) or itLo2 == std::rend(av_opVal.at(iSamp))) {
+            if (av_opVal.at(iSamp).at(iP).at(1) > opPnt.at(1)) {
+              iHi2 = iP;
+              continue;
+            }
+          }
+        }
+
+        if (iHi1 == -1 or iHi2 == -1 or iLo1 == -1 or iLo2 == -1) {
           std::cout << "Op pair " << op1Name << " - " << op2Name << " type " << samp << " point " << opPnt <<
             ": unable to define all 4 neighbor points! Dropping..." << std::endl;
           return true;
         }
-
-        // get indices of the neighbors
-        const int iHi1 = std::distance(std::begin(av_opVal.at(iSamp)), itHi1);
-        const int iHi2 = std::distance(std::begin(av_opVal.at(iSamp)), itHi2);
-
-        // yes getting forward indices of reverse iterators is a bit weird
-        const int iLo1 = nPnt - 1 - std::distance(std::rbegin(av_opVal.at(iSamp)), itLo1);
-        const int iLo2 = nPnt - 1 - std::distance(std::rbegin(av_opVal.at(iSamp)), itLo2);
 
         // now we simply check how many of the neighbors are within the contour
         const int nNeighborIn = (av_dChi2.at(iSamp).at(iHi1) <= dChi2Cut) + (av_dChi2.at(iSamp).at(iLo1) <= dChi2Cut)
@@ -1643,8 +1641,13 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
           return true;
         }
 
-        // ok, we're done
-        return nNeighborIn == 4;      
+        if (nNeighborIn == 3)
+          prev3Neighbor = !prev3Neighbor;
+
+        // only every other point with 3 neighbors inside the contour are considered on-edge
+        // since while they also lie on the edge, in this case the edge is purely vertical or horizontal
+        // so they don't change the bounded area
+        return nNeighborIn == 4 or (nNeighborIn == 3 and prev3Neighbor);
       };
 
       // ok now actually apply the function to weed out the points

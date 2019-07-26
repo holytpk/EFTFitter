@@ -74,6 +74,7 @@ class EFTFitter {
   /// in Fit::absolute, the integral of the template is assigned to count/xsec (likewise for its error)
   /// if sumStat is Stat::count and normalizedSum value is not 0, lumi normalization is done (assuming MC template of weighted count)
   /// to not do lumi normalization just set normalizedSum value to 0 (its error is ignored anyway)
+  /// in Fit::xsec, normalizedSum is ignored, so templates should already have proper normalization
   /// Fit::shape acts like absolute, but of course only shape and shapeSum are used in fit
   /// keyName assumes the syntax is op1_val1--op2_val2-- ... --opN_valN
   void addRawInput(const std::string &keyName, const Sample sampleType, 
