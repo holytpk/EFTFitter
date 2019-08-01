@@ -109,8 +109,14 @@ template <typename Number> std::vector<Number> makeInterval(Number from, Number 
 
 
 /// unary predicate that is always true; to be used in the specializations (where all elements are to be extracted)
-/// always true because sizeof(obj) is never be 0
-const auto alwaysTrue = [] (const auto &obj) { return sizeof(obj); };
+/// usage of sizeof (which is never false) rather than literal true is to dodge -Werror=unused-parameter
+const auto always_true = [] (const auto &obj) { return sizeof(obj); };
+
+
+
+/// functions for returning pair elements
+const auto return_first = [] (const auto &p) { return p.first; };
+const auto return_second = [] (const auto &p) { return p.second; };
 
 
 
@@ -120,7 +126,6 @@ template <typename Key, typename Value, typename Function, typename Predicate>
 auto extractMapIf(const std::map<Key, Value> &map, Function func, Predicate pred)
 {
   std::vector<decltype( func(*(std::cbegin(map))) )> v_out;
-  //std::transform(std::cbegin(map), std::cend(map), std::back_inserter(v_out), func);
   for (const auto& p : map) {
     if (pred(p))
       v_out.push_back( func(p) );
@@ -135,7 +140,7 @@ auto extractMapIf(const std::map<Key, Value> &map, Function func, Predicate pred
 template <typename Key, typename Value, typename Function> 
 auto extractMap(const std::map<Key, Value> &map, Function func)
 {
-  return extractMapIf(map, func, alwaysTrue);
+  return extractMapIf(map, func, always_true);
 }
 
 
@@ -143,7 +148,7 @@ auto extractMap(const std::map<Key, Value> &map, Function func)
 /// specialization of the above for extracting all keys
 template <typename Key, typename Value> std::vector<Key> extractKey(const std::map<Key, Value> &map)
 {
-  return extractMapIf(map, [] (const auto &p) {return p.first;}, alwaysTrue);
+  return extractMapIf(map, return_first, always_true);
 }
 
 
@@ -152,7 +157,7 @@ template <typename Key, typename Value> std::vector<Key> extractKey(const std::m
 template <typename Key, typename Value, typename Predicate> 
 std::vector<Key> extractKeyIf(const std::map<Key, Value> &map, Predicate pred)
 {
-  return extractMapIf(map, [] (const auto &p) {return p.first;}, pred);
+  return extractMapIf(map, return_first, pred);
 }
 
 
@@ -160,7 +165,7 @@ std::vector<Key> extractKeyIf(const std::map<Key, Value> &map, Predicate pred)
 /// and now for value variant
 template <typename Key, typename Value> std::vector<Value> extractValue(const std::map<Key, Value> &map)
 {
-  return extractMapIf(map, [] (const auto &p) {return p.second;}, alwaysTrue);
+  return extractMapIf(map, return_second, always_true);
 }
 
 
@@ -169,7 +174,7 @@ template <typename Key, typename Value> std::vector<Value> extractValue(const st
 template <typename Key, typename Value, typename Predicate> 
 std::vector<Value> extractValueIf(const std::map<Key, Value> &map, Predicate pred)
 {
-  return extractMapIf(map, [] (const auto &p) {return p.second;}, pred);
+  return extractMapIf(map, return_second, pred);
 }
 
 

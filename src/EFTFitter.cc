@@ -2,6 +2,7 @@
 // please refer to header for information
 
 #include "EFTFitter.h"
+#include "PlotUtil.h"
 
 /***
  * EFTFitter source (public)
@@ -345,15 +346,15 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
     m_hist.insert(std::make_pair( std::make_pair(key, samp), std::move(htmp) ));
     m_ratio.insert(std::make_pair( std::make_pair(key, samp), std::move(hrat) ));
 
-    FitUtil::stylePlot(m_hist.at({key, samp}).get(), *iColor, 1., 0, 21 + std::distance(std::begin(v_kColor), iColor), 1.5, 1, 2);
-    FitUtil::stylePlot(m_ratio.at({key, samp}).get(), *iColor, 1., 0, 21 + std::distance(std::begin(v_kColor), iColor), 1.5, 1, 2);
+    stylePlot(m_hist.at({key, samp}).get(), *iColor, 1., 0, 21 + std::distance(std::begin(v_kColor), iColor), 1.5, 1, 2);
+    stylePlot(m_ratio.at({key, samp}).get(), *iColor, 1., 0, 21 + std::distance(std::begin(v_kColor), iColor), 1.5, 1, 2);
     leg->AddEntry(m_hist.at({key, samp}).get(), std::get<2>(ksl).c_str(), "lp");
 
     iColor = std::next(iColor);
   }
 
-  FitUtil::stylePlot(m_hist.at({dataName, Sample::all}).get(), kBlack, 1., 0, 20, 1.5, 1, 2);
-  FitUtil::stylePlot(m_ratio.at({dataName, Sample::all}).get(), kBlack, 1., 0, 20, 1.5, 1, 2);
+  stylePlot(m_hist.at({dataName, Sample::all}).get(), kBlack, 1., 0, 20, 1.5, 1, 2);
+  stylePlot(m_ratio.at({dataName, Sample::all}).get(), kBlack, 1., 0, 20, 1.5, 1, 2);
 
   // just to ensure data always comes last in legend
   const auto idat = std::find_if(std::begin(vt_keySampleLegend), std::end(vt_keySampleLegend), 
@@ -369,21 +370,21 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
     const double rOffset = (useCov) ? 0.37 : 0.37, rTitle = (useCov) ? 0.108 : 0.121;
 
     if (noRatio) {
-      FitUtil::axisPlot(m_hist.at({key, samp}).get(), 
-                        histMin, histMax, yLabel, 0.043, 1.21, 0.037, 0., 0., xLabel, 0.043, 1.11, 0.037);
-      FitUtil::axisPlot(m_ratio.at({key, samp}).get(), 
-                        ratioMin, ratioMax, rLabel, 0.121, 0.41, 0.093, 0., 0., xLabel, 0.131, 0.71, 0.107);
+      axisPlot(m_hist.at({key, samp}).get(), 
+               histMin, histMax, yLabel, 0.043, 1.21, 0.037, 0., 0., xLabel, 0.043, 1.11, 0.037);
+      axisPlot(m_ratio.at({key, samp}).get(), 
+               ratioMin, ratioMax, rLabel, 0.121, 0.41, 0.093, 0., 0., xLabel, 0.131, 0.71, 0.107);
     }
     else {
-      FitUtil::axisPlot(m_hist.at({key, samp}).get(), 
-                        histMin, histMax, yLabel, 0.059, 0.73, 0.047, 0., 0., xLabel, 0.037, 1.15, 0.033);
-      FitUtil::axisPlot(m_ratio.at({key, samp}).get(), 
-                        ratioMin, ratioMax, rLabel, rTitle, rOffset, 0.093, 0., 0., xLabel, 0.131, 0.71, 0.107);
+      axisPlot(m_hist.at({key, samp}).get(), 
+               histMin, histMax, yLabel, 0.059, 0.73, 0.047, 0., 0., xLabel, 0.037, 1.15, 0.033);
+      axisPlot(m_ratio.at({key, samp}).get(), 
+               ratioMin, ratioMax, rLabel, rTitle, rOffset, 0.093, 0., 0., xLabel, 0.131, 0.71, 0.107);
     }
   }
 
   // ok, now let's get to drawing...
-  FitUtil::setH1Style();
+  setH1Style();
   auto can = std::make_unique<TCanvas>("can", "", 200, 10, 1000, 1000);
 
   // has to be declared here to survive the entire scope - always cd to canvas first to ensure correct scaling
@@ -408,19 +409,17 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
 
     txt.SetTextSize(0.039);
 
-    FitUtil::styleLegend(leg.get(), 2, 0, 0, 42, 0.037, "");
-    //FitUtil::putLegend(leg.get(), 0.555, 0.955, 0.615, 0.875); // top right
-    //FitUtil::putLegend(leg.get(), 0.135, 0.615, 0.615, 0.875); // top left
-    //FitUtil::putLegend(leg.get(), 0.455, 0.955, 0.135, 0.395); // bottom right
-    FitUtil::putLegend(leg.get(), 0.135, 0.615, 0.135, 0.395); // bottom left
+    styleLegend(leg.get(), 2, 0, 0, 42, 0.037, "");
+    //putLegend(leg.get(), 0.555, 0.955, 0.615, 0.875); // top right
+    //putLegend(leg.get(), 0.135, 0.615, 0.615, 0.875); // top left
+    //putLegend(leg.get(), 0.455, 0.955, 0.135, 0.395); // bottom right
+    putLegend(leg.get(), 0.135, 0.615, 0.135, 0.395); // bottom left
 
     if (drawLogY) can->SetLogy();
 
     m_hist.at({dataName, Sample::all})->Draw("axis");
     leg->Draw();
-    txt.DrawLatexNDC(0.131, 0.923, FitUtil::topLeft.c_str());
     txt.DrawLatexNDC(0.461, 0.923, topMid.c_str());
-    txt.DrawLatexNDC(0.671, 0.923, FitUtil::topRight.c_str());
 
     for (const auto &hist : m_hist) {
       if (hist.first.first == dataName) continue;
@@ -442,18 +441,16 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
 
     txt.SetTextSize(0.051);
 
-    FitUtil::styleLegend(leg.get(), 2, 0, 0, 42, 0.041, legHeader.c_str());
-    //FitUtil::putLegend(leg.get(), 0.555, 0.955, 0.615, 0.875); // top right
-    FitUtil::putLegend(leg.get(), 0.115, 0.615, 0.615, 0.875); // top left
-    //FitUtil::putLegend(leg.get(), 0.455, 0.955, 0.055, 0.315); // bottom right
+    styleLegend(leg.get(), 2, 0, 0, 42, 0.041, legHeader.c_str());
+    //putLegend(leg.get(), 0.555, 0.955, 0.615, 0.875); // top right
+    putLegend(leg.get(), 0.115, 0.615, 0.615, 0.875); // top left
+    //putLegend(leg.get(), 0.455, 0.955, 0.055, 0.315); // bottom right
 
     if (drawLogY) pad1->SetLogy();
 
     m_hist.at({dataName, Sample::all})->Draw("axis");
     leg->Draw();
-    txt.DrawLatexNDC(0.121, 0.913, FitUtil::topLeft.c_str());
     txt.DrawLatexNDC(0.451, 0.913, topMid.c_str());
-    txt.DrawLatexNDC(0.691, 0.913, FitUtil::topRight.c_str());
 
     for (const auto &hist : m_hist) {
       if (hist.first.first == dataName) continue;
@@ -675,11 +672,11 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
 
     t_cMat.close();
 
-    FitUtil::stylePlot(h_cMat.get(), kBlack, 1., 0, 20, 1.5, 1, 1); // 3rd last arg is marker size, affects text size too...
-    FitUtil::axisPlot(h_cMat.get(), 0., 0., "Column", 0.043, 1.11, 0.037, 0., 0., "Row", 0.043, 1.11, 0.037);
+    stylePlot(h_cMat.get(), kBlack, 1., 0, 20, 1.5, 1, 1); // 3rd last arg is marker size, affects text size too...
+    axisPlot(h_cMat.get(), 0., 0., "Column", 0.043, 1.11, 0.037, 0., 0., "Row", 0.043, 1.11, 0.037);
 
     // apply style - reminder: palette with dark colors in one end likely looks bad for matrices with elements of both sign
-    FitUtil::setH2Style();
+    setH2Style();
     gStyle->SetPalette( kAquamarine );
     //TColor::InvertPalette();
 
@@ -701,9 +698,6 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
     can->cd();
 
     h_cMat->Draw(drawOpt.c_str());
-
-    txt.DrawLatexNDC(0.141, 0.923, FitUtil::topLeft.c_str());
-    txt.DrawLatexNDC(0.631, 0.923, FitUtil::topRight.c_str());
 
     can->SaveAs((dirName + "covMat_" + p_covMat.first + ".pdf").c_str());
     //can->SaveAs((dirName + "covMat_" + p_covMat.first + ".C").c_str());
@@ -1255,10 +1249,10 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
       // and make the graph
       ag_dChi2.at(iSamp) = std::make_unique<TGraph>(av_opVal.at(iSamp).size(), av_opVal.at(iSamp).data(), av_dChi2.at(iSamp).data());
-      FitUtil::stylePlot(ag_dChi2.at(iSamp).get(), kBlack, 1., 0, 20, 1.5, a_sampStyL.at(iSamp), 2);
-      FitUtil::axisPlot(ag_dChi2.at(iSamp).get(), 
-                        yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
-                        xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
+      stylePlot(ag_dChi2.at(iSamp).get(), kBlack, 1., 0, 20, 1.5, a_sampStyL.at(iSamp), 2);
+      axisPlot(ag_dChi2.at(iSamp).get(), 
+               yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
+               xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
       ag_dChi2.at(iSamp)->SetName((opName + "_" + toStr(samp)).c_str());
       ag_dChi2.at(iSamp)->SetTitle("");
 
@@ -1324,20 +1318,20 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
         // guiding line graph
         ag_sigma.at(iSamp).at(0) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
                                                                        a_zero.data(), a_zero.data(), a_zero.data(), a_zero.data());
-        FitUtil::stylePlot(ag_sigma.at(iSamp).at(0).get(), kBlack, 1., 0, 20, 1.5, 8, 2);
-        FitUtil::axisPlot(ag_sigma.at(iSamp).at(0).get(), 
-                          yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
-                          xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
+        stylePlot(ag_sigma.at(iSamp).at(0).get(), kBlack, 1., 0, 20, 1.5, 8, 2);
+        axisPlot(ag_sigma.at(iSamp).at(0).get(), 
+                 yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
+                 xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
         ag_sigma.at(iSamp).at(0)->SetName((opName + "_sigma0_" + toStr(samp)).c_str());
         ag_sigma.at(iSamp).at(0)->SetTitle("");
 
         // 1 sigma graph
         ag_sigma.at(iSamp).at(1) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
                                                                        a_1SigD.data(), a_1SigU.data(), a_vErrD.data(), a_vErrU.data());
-        FitUtil::stylePlot(ag_sigma.at(iSamp).at(1).get(), kGreen + 1, 1., 1001, 0, 1.5, 1, 2);
-        FitUtil::axisPlot(ag_sigma.at(iSamp).at(1).get(), 
-                          yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
-                          xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
+        stylePlot(ag_sigma.at(iSamp).at(1).get(), kGreen + 1, 1., 1001, 0, 1.5, 1, 2);
+        axisPlot(ag_sigma.at(iSamp).at(1).get(), 
+                 yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
+                 xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
         ag_sigma.at(iSamp).at(1)->SetName((opName + "_sigma1_" + toStr(samp)).c_str());
         ag_sigma.at(iSamp).at(1)->SetTitle("");
 
@@ -1345,10 +1339,10 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
           // 2 sigma graph
           ag_sigma.at(iSamp).at(2) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
                                                                          a_2SigD.data(), a_2SigU.data(), a_vErrD.data(), a_vErrU.data());
-          FitUtil::axisPlot(ag_sigma.at(iSamp).at(2).get(), 
-                            yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
-                            xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
-          FitUtil::stylePlot(ag_sigma.at(iSamp).at(2).get(), kOrange, 1., 1001, 0, 1.5, 1, 2);
+          axisPlot(ag_sigma.at(iSamp).at(2).get(), 
+                   yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
+                   xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
+          stylePlot(ag_sigma.at(iSamp).at(2).get(), kOrange, 1., 1001, 0, 1.5, 1, 2);
           ag_sigma.at(iSamp).at(2)->SetName((opName + "_sigma2_" + toStr(samp)).c_str());
           ag_sigma.at(iSamp).at(2)->SetTitle("");
 
@@ -1361,7 +1355,7 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       }
     }
 
-    FitUtil::setH1Style();
+    setH1Style();
     std::unique_ptr<TCanvas> can = std::make_unique<TCanvas>("can", "can", 200, 10, 1000, 1000);
     can->SetTopMargin(0.045);
     can->SetBottomMargin(0.11);
@@ -1377,16 +1371,14 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
 
     can->cd();
 
-    FitUtil::styleLegend(leg.get(), 1, 0, 0, 42, 0.041, "");
-    //FitUtil::putLegend(leg.get(), 0.685, 0.945, 0.655, 0.935); // top right
-    //FitUtil::putLegend(leg.get(), 0.125, 0.385, 0.655, 0.935); // top left
-    FitUtil::putLegend(leg.get(), 0.685, 0.945, 0.155, 0.435); // bottom right
+    styleLegend(leg.get(), 1, 0, 0, 42, 0.041, "");
+    //putLegend(leg.get(), 0.685, 0.945, 0.655, 0.935); // top right
+    //putLegend(leg.get(), 0.125, 0.385, 0.655, 0.935); // top left
+    putLegend(leg.get(), 0.685, 0.945, 0.155, 0.435); // bottom right
 
     ag_dChi2.at(static_cast<int>(v_sample.front()))->Draw("a c");
     leg->Draw();
-    txt.DrawLatexNDC(0.131, 0.915, FitUtil::topLeft.c_str());
     txt.DrawLatexNDC(0.461, 0.915, topMid.c_str());
-    txt.DrawLatexNDC(0.661, 0.923, FitUtil::topRight.c_str());
 
     if (drawSig1) {
       if (drawSig2)
@@ -1548,10 +1540,10 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       // make the best fit graph
       const std::vector<double> v_op1Sig0(1, opMin.at(0)), v_op2Sig0(1, opMin.at(1));
       ag_sigma0.at(iSamp) = std::make_unique<TGraph>(1, v_op2Sig0.data(), v_op1Sig0.data());
-      FitUtil::stylePlot(ag_sigma0.at(iSamp).get(), a_sampCol0.at(iSamp), 1., 0, a_sampStyM.at(iSamp), 2.5, a_sampStyL.at(iSamp), 3);
-      FitUtil::axisPlot(ag_sigma0.at(iSamp).get(), 
-                        op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-                        op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+      stylePlot(ag_sigma0.at(iSamp).get(), a_sampCol0.at(iSamp), 1., 0, a_sampStyM.at(iSamp), 2.5, a_sampStyL.at(iSamp), 3);
+      axisPlot(ag_sigma0.at(iSamp).get(), 
+               op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
+               op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
       ag_sigma0.at(iSamp)->SetName((op1Name + "_" + op2Name + "_sigma0_" + toStr(samp)).c_str());
       ag_sigma0.at(iSamp)->SetTitle("");
       leg->AddEntry(ag_sigma0.at(iSamp).get(), ("Best fit" + a_sampLeg.at(iSamp)).c_str(), "p");
@@ -1681,18 +1673,18 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       }
 
       ag_sigma1.at(iSamp) = std::make_unique<TGraph>(v_op1Sig1.size(), v_op2Sig1.data(), v_op1Sig1.data());
-      FitUtil::stylePlot(ag_sigma1.at(iSamp).get(), a_sampCol1.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 4);
-      FitUtil::axisPlot(ag_sigma1.at(iSamp).get(), 
-                        op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-                        op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+      stylePlot(ag_sigma1.at(iSamp).get(), a_sampCol1.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 4);
+      axisPlot(ag_sigma1.at(iSamp).get(), 
+               op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
+               op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
       ag_sigma1.at(iSamp)->SetName((op1Name + "_" + op2Name + "_sigma1_" + toStr(samp)).c_str());
       ag_sigma1.at(iSamp)->SetTitle("");
 
       ag_sigma2.at(iSamp) = std::make_unique<TGraph>(v_op1Sig2.size(), v_op2Sig2.data(), v_op1Sig2.data());
-      FitUtil::stylePlot(ag_sigma2.at(iSamp).get(), a_sampCol2.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 4);
-      FitUtil::axisPlot(ag_sigma2.at(iSamp).get(), 
-                        op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-                        op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+      stylePlot(ag_sigma2.at(iSamp).get(), a_sampCol2.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 4);
+      axisPlot(ag_sigma2.at(iSamp).get(), 
+               op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
+               op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
       ag_sigma2.at(iSamp)->SetName((op1Name + "_" + op2Name + "_sigma2_" + toStr(samp)).c_str());
       ag_sigma2.at(iSamp)->SetTitle("");
     }
@@ -1700,22 +1692,22 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
     // and now we make the line to guide the eye along 0 in y and x
     std::array<std::unique_ptr<TGraph>, 2> ag_zero = {nullptr, nullptr};
     ag_zero.at(0) = std::make_unique<TGraph>(2, op2Range.data(), a_zero.data());
-    FitUtil::stylePlot(ag_zero.at(0).get(), kGray + 2, 1., 0, 0, 2.5, 1, 1);
-    FitUtil::axisPlot(ag_zero.at(0).get(), 
-                      op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-                      op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+    stylePlot(ag_zero.at(0).get(), kGray + 2, 1., 0, 0, 2.5, 1, 1);
+    axisPlot(ag_zero.at(0).get(), 
+             op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
+             op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
     ag_zero.at(0)->SetName((op1Name + "_" + op2Name + "_xX_y0").c_str());
     ag_zero.at(0)->SetTitle("");
 
     ag_zero.at(1) = std::make_unique<TGraph>(2, a_zero.data(), op1Range.data());
-    FitUtil::stylePlot(ag_zero.at(1).get(), kGray + 2, 1., 0, 0, 2.5, 1, 1);
-    FitUtil::axisPlot(ag_zero.at(1).get(), 
-                      op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-                      op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+    stylePlot(ag_zero.at(1).get(), kGray + 2, 1., 0, 0, 2.5, 1, 1);
+    axisPlot(ag_zero.at(1).get(), 
+             op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
+             op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
     ag_zero.at(1)->SetName((op1Name + "_" + op2Name + "_x0_yY").c_str());
     ag_zero.at(1)->SetTitle("");
 
-    FitUtil::setH1Style();
+    setH1Style();
     std::unique_ptr<TCanvas> can = std::make_unique<TCanvas>("can", "can", 200, 10, 1000, 1000);
     can->SetTopMargin(0.045);
     can->SetBottomMargin(0.11);
@@ -1730,16 +1722,14 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
 
     can->cd();
 
-    FitUtil::styleLegend(leg.get(), 1, 0, 0, 42, 0.041, "");
-    //FitUtil::putLegend(leg.get(), 0.685, 0.945, 0.755, 0.935); // top right
-    //FitUtil::putLegend(leg.get(), 0.125, 0.385, 0.755, 0.935); // top left
-    FitUtil::putLegend(leg.get(), 0.685, 0.945, 0.155, 0.335); // bottom right
+    styleLegend(leg.get(), 1, 0, 0, 42, 0.041, "");
+    //putLegend(leg.get(), 0.685, 0.945, 0.755, 0.935); // top right
+    //putLegend(leg.get(), 0.125, 0.385, 0.755, 0.935); // top left
+    putLegend(leg.get(), 0.685, 0.945, 0.155, 0.335); // bottom right
 
     ag_sigma0.at(static_cast<int>(v_sample.front()))->Draw("a p");
     leg->Draw();
-    txt.DrawLatexNDC(0.131, 0.923, FitUtil::topLeft.c_str());
     txt.DrawLatexNDC(0.461, 0.923, topMid.c_str());
-    txt.DrawLatexNDC(0.671, 0.923, FitUtil::topRight.c_str());
 
     ag_zero.at(0)->Draw("l");
     ag_zero.at(1)->Draw("l");
@@ -2220,92 +2210,6 @@ double EFTFitter::getDPoissonVariation(const double &mean) const
 
 
 
-void FitUtil::setH1Style()
-{
-  // always reset everything first
-  gStyle->Reset();
-  gROOT->SetStyle("Plain");
-
-  // if color alpha is needed (some install may not have this by default)
-  gStyle->SetCanvasPreferGL(true);
-
-  gStyle->SetFrameBorderMode(0);
-  gStyle->SetCanvasBorderMode(0);
-  gStyle->SetPadBorderMode(0);
-
-  //gStyle->SetFrameColor(0);
-  gStyle->SetPadColor(0);
-  gStyle->SetCanvasColor(0);
-  gStyle->SetStatColor(0);
-  gStyle->SetFillColor(0);
-
-  //gStyle->SetPaperSize(20, 26);
-  //gStyle->SetPadTopMargin(0.1);
-  gStyle->SetPadBottomMargin(0.085);
-  gStyle->SetPadRightMargin(0.03);
-  gStyle->SetPadLeftMargin(0.06);
-  //gStyle->SetCanvasDefH(800);
-  //gStyle->SetCanvasDefW(800);
-  //gStyle->SetPadGridX(1);
-  //gStyle->SetPadGridY(1);
-  gStyle->SetPadTickX(1);
-  gStyle->SetPadTickY(1);
-
-  gStyle->SetTextFont(42);
-  gStyle->SetTextSize(0.03);
-  gStyle->SetLabelFont(42, "xyz");
-  gStyle->SetTitleFont(42, "xyz");
-  gStyle->SetLabelSize(0.025, "xyz");
-  gStyle->SetTitleSize(0.027, "xyz");
-  gStyle->SetTitleOffset(1.1, "y");
-  gStyle->SetTitleOffset(1.1, "x");
-    
-  gStyle->SetTitleX(0.5); // suit the plot
-  gStyle->SetTitleY(0.97);
-  gStyle->SetTitleAlign(23);
-  gStyle->SetTitleColor(1);
-  gStyle->SetTitleTextColor(1);
-  gStyle->SetTitleFillColor(0);
-  gStyle->SetTitleBorderSize(0);
-  gStyle->SetTitleFontSize(0.035);
-  //gStyle->SetTitleStyle(1001);
-  //gStyle->SetPadTopMargin(0.05);
-  //gStyle->SetPadBottomMargin(0.10);
-  //gStyle->SetPadLeftMargin(0.13);
-  //gStyle->SetPadRightMargin(0.02);
-
-  // use bold lines and markers
-  gStyle->SetMarkerSize(4);
-  gStyle->SetHistLineWidth(2);
-  gStyle->SetLineWidth(2);
-  
-  //gStyle->SetOptTitle(kFALSE);
-  gStyle->SetOptStat(0);
-}
-
-
-
-void FitUtil::setH2Style()
-{
-  // always reset everything first (doesn't seem to really work hm)
-  gStyle->Reset();
-  FitUtil::setH1Style();
-
-  gStyle->SetPalette( kBird ); // https://root.cern.ch/doc/master/classTColor.html#C06
-  gStyle->SetOptStat(0);
-
-  //gStyle->SetPadTopMargin(0.025);
-  //gStyle->SetPadBottomMargin(0.19);
-  //gStyle->SetPadLeftMargin(0.08);
-  //gStyle->SetPadRightMargin(0.015);
-
-  gStyle->SetTextFont(42);
-  gStyle->SetTextSizePixels(23);
-  gStyle->SetPaintTextFormat(".3g");
-}
-
-
-
 std::vector<double> FitUtil::extractBin(TH1 *hist)
 {
   const int nBin = hist->GetNbinsX();
@@ -2327,102 +2231,3 @@ std::vector<std::array<double, 2>> FitUtil::extractContentError(TH1 *hist)
 
   return v_conErr;
 }
-
-
-
-template <typename Plot> 
-void FitUtil::stylePlot(Plot *plot, 
-                        const int useColor, const double colorAlpha, const int fillStyle, 
-                        const int markStyle, const double markSize, 
-                        const int lineStyle, const int lineWidth, 
-                        const std::string &mainTitle) 
-{
-  plot->SetFillColorAlpha(useColor, colorAlpha);
-  plot->SetFillStyle(fillStyle);
-  plot->SetMarkerColor(useColor);
-  plot->SetMarkerStyle(markStyle);
-  plot->SetMarkerSize(markSize);
-  plot->SetLineStyle(lineStyle);
-  plot->SetLineColor(useColor);
-  plot->SetLineWidth(lineWidth);
-  plot->SetTitle( mainTitle.c_str() );
-}
-
-
-
-template <typename Plot> 
-void FitUtil::axisPlot(Plot *plot,
-                       const double yMin, const double yMax,
-                       const std::string &yTxt, const double ySiz, const double yOff, const double yLab,
-                       const double xMin, const double xMax,
-                       const std::string &xTxt, const double xSiz, const double xOff, const double xLab) 
-{
-  // if we don't want the range setter, just give an invalid range
-  // btw thanks ROOT: Y U NO SAME METHOD FOR AXIS RANGE FOR HISTOGRAM AND GRAPH??? https://root.cern.ch/how/how-set-ranges-axis
-
-  axisRange(*plot, yMin, yMax, xMin, xMax);
-
-  plot->GetYaxis()->SetTitle(yTxt.c_str());
-  plot->GetYaxis()->SetTitleSize(ySiz);
-  plot->GetYaxis()->SetTitleOffset(yOff);
-  plot->GetYaxis()->SetLabelSize(yLab);
-  plot->GetYaxis()->SetNdivisions(507);
-
-  plot->GetXaxis()->SetTitle(xTxt.c_str());
-  plot->GetXaxis()->SetTitleSize(xSiz);
-  plot->GetXaxis()->SetTitleOffset(xOff);
-  plot->GetXaxis()->SetLabelSize(xLab);
-  plot->GetXaxis()->SetNdivisions(507);
-}
-
-
-
-void FitUtil::axisRange(TGraph &plot,
-                        const double yMin, const double yMax, const double xMin, const double xMax)
-{
-  if (yMin < yMax) {
-    // for graphs histograms are just to draw the frame
-    // if it has an error then that would draw a line at 0
-    // at least until ROOT 6.14.02 this bug is there
-    plot.GetHistogram()->Sumw2(false);
-    plot.GetHistogram()->SetMinimum(yMin);
-    plot.GetHistogram()->SetMaximum(yMax);
-  }
-  if (xMin < xMax)
-    plot.GetXaxis()->SetLimits(xMin, xMax);
-}
-
-
-
-void FitUtil::axisRange(TH1 &plot,
-                        const double yMin, const double yMax, const double xMin, const double xMax)
-{
-  if (yMin < yMax)
-    plot.GetYaxis()->SetRangeUser(yMin, yMax);
-  if (xMin < xMax)
-    plot.GetXaxis()->SetRangeUser(xMin, xMax);
-}
-
-
-
-void FitUtil::styleLegend(TLegend *leg, 
-                          const int nColumn, const int fillColor, const int borderSize, 
-                          const int txtFont, const double txtSize, 
-                          const std::string &legHead)
-{
-  leg->SetNColumns(nColumn);
-  leg->SetFillColor(fillColor);
-  leg->SetBorderSize(borderSize);
-  leg->SetTextFont(txtFont);
-  leg->SetTextSize(txtSize);
-  leg->SetHeader( legHead.c_str() );
-}
-
-
-
-void FitUtil::putLegend(TLegend *leg, const double x1, const double x2, const double y1, const double y2)
-{
-  leg->SetX1(x1); leg->SetX2(x2);
-  leg->SetY1(y1); leg->SetY2(y2);
-}
-

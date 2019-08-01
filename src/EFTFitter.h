@@ -11,33 +11,12 @@
 #include <random>
 #include <chrono>
 
-#include "TROOT.h"
-#include "TFile.h"
-#include "TObject.h"
-#include "TClass.h"
-#include "TKey.h"
-
-#include "TCanvas.h"
-#include "TPad.h"
-#include "TStyle.h"
-#include "TColor.h"
-
-#include "TH1.h"
-#include "TH1D.h"
-#include "TH2.h"
-#include "TH2D.h"
-
-#include "TGraph.h"
-#include "TGraphAsymmErrors.h"
-
-#include "TAxis.h"
-#include "TLegend.h"
-#include "TGaxis.h"
-#include "TLatex.h"
-
 #include "TMath.h"
 #include "TMatrixD.h"
 //#include "TDecompLU.h"
+
+class TH1;
+class TH1D;
 
 class EFTFitter {
  public:
@@ -281,54 +260,11 @@ namespace FitUtil {
   /// rng for any random stuff
   static std::mt19937_64 rng(std::random_device{}());
 
-  /// standard text on plots (in any case can always re-plot in external macros)
-  const std::string topLeft = ""; // "#bf{CMS} #it{Private Work}"; 
-  //const std::string topRight = ""; // "35.9 /fb @ 13 TeV";
-
-  /// for publications
-  //const std::string topLeft = "#scale[1.2]{#bf{CMS}}"; 
-  const std::string topRight = "35.9 fb^{-1} (13 TeV)";
-
-  /// style of TH1 - reproducing the TDRStyle macro
-  void setH1Style();
-
-  /// style of TH2
-  void setH2Style();
-
   /// extract the binning used in a hist
   std::vector<double> extractBin(TH1 *hist);
 
   /// extract the bin contents and errors of a hist (assumes symmetrical errors)
   std::vector<std::array<double, 2>> extractContentError(TH1 *hist);
-
-  /// styling of hist, graph
-  template <typename Plot> void stylePlot(Plot *plot, 
-                                          const int useColor, const double colorAlpha, const int fillStyle, 
-                                          const int markStyle, const double markSize, 
-                                          const int lineStyle, const int lineWidth, 
-                                          const std::string &mainTitle = "");
-
-  /// range and labeling of y, x axes
-  template <typename Plot> void axisPlot(Plot *plot,
-                                         const double yMin, const double yMax,
-                                         const std::string &yTxt, const double ySiz, const double yOff, const double yLab,
-                                         const double xMin, const double xMax,
-                                         const std::string &xTxt, const double xSiz, const double xOff, const double xLab);
-
-  /// best overloads ever; if only we could slug them in axisPlot()...
-  void axisRange(TGraph &plot,
-                 const double yMin, const double yMax, const double xMin, const double xMax);
-
-  void axisRange(TH1 &plot,
-                 const double yMin, const double yMax, const double xMin, const double xMax);
-
-  /// styling, positioning of plot legend
-  void styleLegend(TLegend *leg, 
-                   const int nColumn, const int fillColor, const int borderSize, 
-                   const int txtFont, const double txtSize, 
-                   const std::string &legHead = "");
-
-  void putLegend(TLegend *leg, const double x1, const double x2, const double y1, const double y2);
 }
 
 
