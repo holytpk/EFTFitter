@@ -1,5 +1,6 @@
 // -*- C++ -*-
-// Styling methods for ROOT plotting
+// mainly styling methods for ROOT plotting
+// however also includes other ROOT-reliant utility methods
 
 #ifndef PLOTUTIL_H
 #define PLOTUTIL_H
@@ -7,6 +8,7 @@
 #include "TemplateUtil.h"
 
 #include "TROOT.h"
+#include "TSystem.h"
 #include "TFile.h"
 #include "TObject.h"
 #include "TClass.h"
@@ -34,6 +36,8 @@
 
 #include "TMarker.h"
 #include "TLine.h"
+
+#include "TString.h"
 
 void setH1Style()
 {
@@ -214,6 +218,7 @@ void styleLegend(TLegend *leg,
                  const std::string &legHead = "")
 {
   leg->SetNColumns(nColumn);
+  leg->SetFillStyle(0);
   leg->SetFillColor(fillColor);
   leg->SetBorderSize(borderSize);
   leg->SetTextFont(txtFont);
@@ -229,5 +234,21 @@ void putLegend(TLegend *leg, const double x1, const double x2, const double y1, 
   leg->SetY1(y1); leg->SetY2(y2);
 }
 
+
+
+// poor man's version of file finder by extension
+std::vector<std::string> file_by_ext(const std::string &dir, const std::string &ext)
+{
+  // which really relies on ROOT's ability to run shell commands aha
+  TString allfile = gSystem->GetFromPipe(("find " + dir + " -type f -name '*" + ext + "'").c_str());
+  TString file;
+  Ssiz_t index = 0;
+
+  std::vector<std::string> v_file;
+  while (allfile.Tokenize(file, index, "\n"))
+    v_file.push_back(file.Data());
+
+  return v_file;
+}
 
 #endif
