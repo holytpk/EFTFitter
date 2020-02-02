@@ -106,7 +106,8 @@ void legend_canvas(const std::vector<Plot<TH1>> &v_hist, const std::vector<Plot<
                    const std::string &filename,
                    const int leg_ncolumn, const int leg_fill_color, const int leg_border_size, 
                    const int leg_font, const double leg_txt_size, const std::string &leg_header, 
-                   const double leg_x1, const double leg_x2, const double leg_y1, const double leg_y2) {
+                   const double leg_x1, const double leg_x2, const double leg_y1, const double leg_y2,
+                   const std::string &plotformat = ".pdf") {
   if (!(leg_x2 > leg_x1 and leg_y2 > leg_y1))
     return;
 
@@ -140,7 +141,7 @@ void legend_canvas(const std::vector<Plot<TH1>> &v_hist, const std::vector<Plot<
 
   // draw and save
   leg->Draw();
-  can->SaveAs( (filename + ".pdf").c_str() );
+  can->SaveAs( (filename + plotformat).c_str() );
 }
 
 
