@@ -1,6 +1,6 @@
 // -*- C++ -*-
-// mainly styling methods for ROOT plotting
-// however also includes other ROOT-reliant utility methods
+// author: afiq anuar
+// short: styling methods for ROOT plotting and histogram manipulation
 
 #ifndef PLOTUTIL_H
 #define PLOTUTIL_H
@@ -8,7 +8,6 @@
 #include "TemplateUtil.h"
 
 #include "TROOT.h"
-#include "TSystem.h"
 #include "TFile.h"
 #include "TObject.h"
 #include "TClass.h"
@@ -36,8 +35,6 @@
 
 #include "TMarker.h"
 #include "TLine.h"
-
-#include "TString.h"
 
 void setH1Style()
 {
@@ -236,19 +233,20 @@ void putLegend(TLegend *leg, const double x1, const double x2, const double y1, 
 
 
 
-// poor man's version of file finder by extension
-std::vector<std::string> file_by_ext(const std::string &dir, const std::string &ext)
-{
-  // which really relies on ROOT's ability to run shell commands aha
-  TString allfile = gSystem->GetFromPipe(("find " + dir + " -type f -name '*" + ext + "'").c_str());
-  TString file;
-  Ssiz_t index = 0;
+// to add back the under/overflows to first/last bin
+void add_uoflow_bin(TH1 *hist) {
+  const int nBin = hist->GetNbinsX();
+  hist->SetBinContent(1, hist->GetBinContent(1) + hist->GetBinContent(0));
+  hist->SetBinError(1, std::sqrt((hist->GetBinError(1) * hist->GetBinError(1)) + (hist->GetBinError(0) * hist->GetBinError(0))));
 
-  std::vector<std::string> v_file;
-  while (allfile.Tokenize(file, index, "\n"))
-    v_file.push_back(file.Data());
+  hist->SetBinContent(0, 0.);
+  hist->SetBinError(0, 0.);
 
-  return v_file;
+  hist->SetBinContent(nBin, hist->GetBinContent(nBin) + hist->GetBinContent(nBin + 1));
+  hist->SetBinError(nBin, std::sqrt((hist->GetBinError(nBin) * hist->GetBinError(nBin)) + (hist->GetBinError(nBin + 1) * hist->GetBinError(nBin + 1))));
+
+  hist->SetBinContent(nBin + 1, 0.);
+  hist->SetBinError(nBin + 1, 0.);
 }
 
 #endif
