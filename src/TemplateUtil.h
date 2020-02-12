@@ -1,8 +1,12 @@
 // -*- C++ -*-
-// Place for very common methods that are used often
+// author: afiq anuar
+// short: common utility methods on data handling
 
 #ifndef TEMPLATEUTIL_H
 #define TEMPLATEUTIL_H
+
+// headers are not necessarily needed HERE
+// but convenient to have one central include that allows access to very common techniques
 
 #include <iostream>
 #include <sstream>
@@ -12,21 +16,48 @@
 
 #include <memory>
 #include <utility>
-#include <algorithm>
-#include <numeric>
-#include <functional>
-#include <stdexcept>
-#include <type_traits>
 
-#include <array>
 #include <vector>
 #include <map>
+#include <array>
 #include <tuple>
+
+#include <algorithm>
+#include <numeric>
+
+#include <type_traits>
+#include <functional>
+#include <stdexcept>
 
 #include <cmath>
 
-/// methods that are really "bare" data handling (in header so that even exec macro can use them)
-/// non-templates functions need to be inlined
+/// poor man's std::hypot (tested with g++/clang++, fine for double: 1e-158 < i < 1e10)
+template <typename Number>
+Number quad_sum(const Number num1, const Number num2)
+{
+  return std::sqrt((num1 * num1) + (num2 * num2));
+}
+
+
+
+/// as it says on the tin
+template <typename Number>
+Number deltaPhi(const Number phi1, const Number phi2) 
+{
+  return std::acos( std::cos(phi1 - phi2) );
+}
+
+
+
+/// also as it says on the tin
+template <typename Number>
+Number deltaR(const Number eta1, const Number phi1, const Number eta2, const Number phi2) 
+{
+  return quad_sum(eta1 - eta2, deltaPhi(phi1, phi2));
+}
+
+
+
 /// string replacement
 inline bool replace(std::string &str, const std::string &from, const std::string &to) {
   std::size_t start_pos = str.find(from);
@@ -54,7 +85,8 @@ inline int count_substring(const std::string &str, const std::string &sub) {
 
 
 /// number to string; to_string tend to give more precision than needed
-template <typename Number> std::string toStr(Number inNo, const int prec = -1, const bool fixed = false) 
+template <typename Number> 
+std::string toStr(Number inNo, const int prec = -1, const bool fixed = false) 
 {
   std::ostringstream outStr;
   if (fixed)
@@ -79,7 +111,7 @@ void fillInterval(std::vector<Number> &vec, Number from, Number to, Number step)
       or vec.empty() or std::abs(vec.back() - from) >= eps) return;
 
   while (std::abs(to - vec.back()) >= eps)
-    vec.push_back(vec.back() + step);
+    vec.emplace_back(vec.back() + step);
 }
 
 
@@ -93,13 +125,14 @@ void fillInterval(std::vector<Number> &vec, Number from, Number to, Number step)
       or vec.empty() or vec.back() != from) return;
 
   while (std::abs(to - vec.back()) >= std::abs(step))
-    vec.push_back(vec.back() + step);
+    vec.emplace_back(vec.back() + step);
 }
 
 
 
 /// method that makes such an interval vector relying on the above
-template <typename Number> std::vector<Number> makeInterval(Number from, Number to, Number step)
+template <typename Number> 
+std::vector<Number> makeInterval(Number from, Number to, Number step)
 {
   std::vector<Number> v_interval = {from};
   fillInterval(v_interval, from, to, step);
@@ -128,7 +161,7 @@ auto extractMapIf(const std::map<Key, Value> &map, Function func, Predicate pred
   std::vector<decltype( func(*(std::cbegin(map))) )> v_out;
   for (const auto& p : map) {
     if (pred(p))
-      v_out.push_back( func(p) );
+      v_out.emplace_back( func(p) );
   }
 
   return v_out;
@@ -146,7 +179,8 @@ auto extractMap(const std::map<Key, Value> &map, Function func)
 
 
 /// specialization of the above for extracting all keys
-template <typename Key, typename Value> std::vector<Key> extractKey(const std::map<Key, Value> &map)
+template <typename Key, typename Value> 
+std::vector<Key> extractKey(const std::map<Key, Value> &map)
 {
   return extractMapIf(map, return_first, always_true);
 }
@@ -163,7 +197,8 @@ std::vector<Key> extractKeyIf(const std::map<Key, Value> &map, Predicate pred)
 
 
 /// and now for value variant
-template <typename Key, typename Value> std::vector<Value> extractValue(const std::map<Key, Value> &map)
+template <typename Key, typename Value> 
+std::vector<Value> extractValue(const std::map<Key, Value> &map)
 {
   return extractMapIf(map, return_second, always_true);
 }
@@ -180,7 +215,8 @@ std::vector<Value> extractValueIf(const std::map<Key, Value> &map, Predicate pre
 
 
 /// this overload is for printAll to correctly print pair-types
-template <typename One, typename Two> std::ostream& operator<<(std::ostream& out, const std::pair<One, Two> &pair)
+template <typename One, typename Two> 
+std::ostream& operator<<(std::ostream& out, const std::pair<One, Two> &pair)
 {
   out << "[ " << pair.first << " :: " << pair.second << " ]";
   return out;

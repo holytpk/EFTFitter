@@ -15,7 +15,7 @@ struct Plot {
 
 // do not put extension in filename
 void standard_plot(const std::vector<Plot<TH1>> &v_hist, const std::vector<Plot<TGraph>> &v_graph,
-                   const std::string &filename, const bool normalize_shape, const bool logX, const bool logY, 
+                   const std::string &filename, const bool add_uoflow, const bool normalize_shape, const bool logX, const bool logY, 
                    const int leg_ncolumn, const int leg_fill_color, const int leg_border_size, 
                    const int leg_font, const double leg_txt_size, const std::string &leg_header, 
                    const double leg_x1, const double leg_x2, const double leg_y1, const double leg_y2,
@@ -26,6 +26,11 @@ void standard_plot(const std::vector<Plot<TH1>> &v_hist, const std::vector<Plot<
                    const double can_top_margin, const double can_bottom_margin, 
                    const double can_left_margin, const double can_right_margin,
                    const std::string &plotformat = ".pdf") {
+  if (add_uoflow) {
+    for (auto &hist: v_hist)
+      add_uoflow_bin(hist.plot.get());
+  }
+
   // normalize histograms if requested
   if (normalize_shape) {
     for (auto &hist: v_hist)
