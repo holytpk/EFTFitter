@@ -5,6 +5,7 @@
 #define PLOTTERUTIL_H
 
 #include "PlotUtil.h"
+#include "TPaletteAxis.h"
 
 // a simple wrapper - the plot itself, the legend text, legend type and draw options
 template <typename P>
@@ -99,6 +100,224 @@ void standard_plot(const std::vector<Plot<TH1>> &v_hist, const std::vector<Plot<
     hist.plot->Draw( (hist.draw_opt + " same").c_str() );
   for (auto &graph: v_graph) 
     graph.plot->Draw( graph.draw_opt.c_str() );
+
+  can->RedrawAxis();
+  can->SaveAs( (filename + plotformat).c_str() );
+  can->SaveAs( (filename + ".root").c_str() );
+}
+
+
+
+// do not put extension in filename
+void standard_ratio(const std::vector<Plot<TH1>> &v_hist,
+                    const std::string &filename, const bool add_uoflow, const bool normalize_shape, const bool binomial_error,
+                    const bool logX, const bool logY, 
+                    const int leg_ncolumn, const int leg_fill_color, const int leg_border_size, 
+                    const int leg_font, const double leg_txt_size, const std::string &leg_header, 
+                    const double leg_x1, const double leg_x2, const double leg_y1, const double leg_y2,
+                    const double axy_min, const double axy_max,
+                    const std::string &axy_txt, const double axy_txt_size, const double axy_offset, const double axy_label,
+                    const double axr_min, const double axr_max,
+                    const std::string &axr_txt, const double axr_txt_size, const double axr_offset, const double axr_label,
+                    const double axx_min, const double axx_max,
+                    const std::string &axx_txt, const double axx_txt_size, const double axx_offset, const double axx_label,
+                    const double pad1_top_end, const double pad1_bottom_end, 
+                    const double pad1_top_margin, const double pad1_bottom_margin,
+                    const double pad2_top_end, const double pad2_bottom_end, 
+                    const double pad2_top_margin, const double pad2_bottom_margin, 
+                    const double can_left_margin, const double can_right_margin,
+                    const std::string &plotformat = ".pdf") {
+  if (add_uoflow) {
+    for (auto &hist: v_hist)
+      add_uoflow_bin(hist.plot.get());
+  }
+
+  // normalize histograms if requested
+  if (normalize_shape) {
+    for (auto &hist: v_hist)
+      hist.plot->Scale(1. / hist.plot->Integral());
+  }
+
+  // and axis setting
+  for (auto &hist: v_hist) {
+    axisPlot(hist.plot.get(), 
+             axy_min, axy_max, axy_txt, axy_txt_size, axy_offset, axy_label, 
+             axx_min, axx_max, axx_txt, axx_txt_size, axx_offset, axx_label);
+  }
+
+  // make the ratio plots
+  std::vector<Plot<TH1>> v_rhist(v_hist.size());
+  for (uint iR = 0; iR < v_hist.size(); ++iR) {
+    const std::string name = v_hist[iR].plot->GetName();
+    v_rhist[iR].draw_opt = v_hist[iR].draw_opt;
+    v_rhist[iR].plot = std::unique_ptr<TH1D>(dynamic_cast<TH1D *>( v_hist[iR].plot->Clone( (name + "_ratio").c_str() )));
+    v_rhist[iR].plot->Reset();
+
+    if (binomial_error)
+      v_rhist[iR].plot->Divide(v_hist[iR].plot.get(), v_hist[0].plot.get(), 1., 1., "B");
+    else
+      v_rhist[iR].plot->Divide(v_hist[iR].plot.get(), v_hist[0].plot.get(), 1., 1.);
+  }
+
+  for (auto &rhist: v_rhist) {
+    axisPlot(rhist.plot.get(), 
+             axr_min, axr_max, axr_txt, axr_txt_size, axr_offset, axr_label, 
+             axx_min, axx_max, axx_txt, axx_txt_size, axx_offset, axx_label);
+  }
+
+  auto leg = std::make_unique<TLegend>();
+  if (leg_x2 > leg_x1 and leg_y2 > leg_y1) {
+    for (auto &hist: v_hist) {
+      if (hist.legend_txt != "" and hist.legend_opt != "")
+        leg->AddEntry(hist.plot.get(), hist.legend_txt.c_str(), hist.legend_opt.c_str());
+    }
+  }
+
+  // making the canvas
+  setH1Style();
+
+  auto can = std::make_unique<TCanvas>("canvas", "canvas", 200, 10, 1000, 1000);
+  can->SetFrameFillColor(0); // transparent plot
+  can->SetFrameFillStyle(0); // transparent plot
+  can->SetFrameBorderMode(0); // transparent plot
+  can->SetFillColor(0); // transparent plot
+  can->SetFillStyle(0); // transparent plot
+  can->cd();
+
+  auto pad1 = std::make_unique<TPad>("pad1", "", 0., pad1_bottom_end, 1., pad1_top_end);
+  pad1->SetFrameFillColor(0); // transparent plot
+  pad1->SetFrameFillStyle(0); // transparent plot
+  pad1->SetFrameBorderMode(0); // transparent plot
+  pad1->SetFillColor(0); // transparent plot
+  pad1->SetFillStyle(0); // transparent plot
+  pad1->SetTopMargin(pad1_top_margin);
+  pad1->SetBottomMargin(pad1_bottom_margin);
+  pad1->SetLeftMargin(can_left_margin);
+  pad1->SetRightMargin(can_right_margin);
+  pad1->Draw();
+
+  pad1->cd();
+  if (logX)
+    pad1->SetLogx();
+  if (logY)
+    pad1->SetLogy();
+
+  if (leg_x2 > leg_x1 and leg_y2 > leg_y1) {
+    styleLegend(leg.get(), leg_ncolumn, leg_fill_color, leg_border_size, 
+                leg_font, leg_txt_size, leg_header);
+    putLegend(leg.get(), leg_x1, leg_x2, leg_y1, leg_y2);
+  }
+
+  if (!v_hist.empty())
+    v_hist.front().plot->Draw( v_hist.front().draw_opt.c_str() );
+
+  if (leg_x2 > leg_x1 and leg_y2 > leg_y1)
+    leg->Draw();
+
+  for (auto &hist: v_hist) 
+    hist.plot->Draw( (hist.draw_opt + " same").c_str() );
+
+  pad1->RedrawAxis();
+  can->cd();
+
+  auto pad2 = std::make_unique<TPad>("pad2", "", 0., pad2_bottom_end, 1., pad2_top_end);
+  pad2->SetFrameFillColor(0); // transparent plot
+  pad2->SetFrameFillStyle(0); // transparent plot
+  pad2->SetFrameBorderMode(0); // transparent plot
+  pad2->SetFillColor(0); // transparent plot
+  pad2->SetFillStyle(0); // transparent plot
+  pad2->SetTopMargin(pad2_top_margin);
+  pad2->SetBottomMargin(pad2_bottom_margin);
+  pad2->SetLeftMargin(can_left_margin);
+  pad2->SetRightMargin(can_right_margin);
+  pad2->Draw();
+
+  pad2->cd();
+
+  if (!v_rhist.empty())
+    v_rhist.front().plot->Draw( v_rhist.front().draw_opt.c_str() );
+
+  for (auto &rhist: v_rhist) 
+    rhist.plot->Draw( (rhist.draw_opt + " same").c_str() );
+
+  pad2->RedrawAxis();
+  can->cd();
+
+  can->SaveAs( (filename + plotformat).c_str() );
+  can->SaveAs( (filename + ".root").c_str() );
+}
+
+
+
+// do not put extension in filename
+// FIXME still to be finalized; many args are dummy
+void standard_colormap(const Plot<TH2> &hist,
+                       const std::string &filename, const bool add_uoflow, const bool normalize_shape, 
+                       const bool logX, const bool logY, const bool logZ, const int color_palette,
+                       const double axz_min, const double axz_max,
+                       const std::string &axz_txt, const double axz_txt_size, const double axz_offset, const double axz_label,
+                       const double axz_begin, const double axz_width,
+                       const double axy_min, const double axy_max,
+                       const std::string &axy_txt, const double axy_txt_size, const double axy_offset, const double axy_label,
+                       const double axx_min, const double axx_max,
+                       const std::string &axx_txt, const double axx_txt_size, const double axx_offset, const double axx_label,
+                       const double can_top_margin, const double can_bottom_margin, 
+                       const double can_left_margin, const double can_right_margin,
+                       const std::string &plotformat = ".pdf") {
+  if (add_uoflow) {
+    //add_uoflow_bin(hist.plot.get());
+  }
+
+  // normalize histograms if requested
+  if (normalize_shape) {
+    hist.plot->Scale(1. / hist.plot->Integral());
+  }
+
+  // and axis setting
+  axisPlot(hist.plot.get(), 
+           axy_min, axy_max, axy_txt, axy_txt_size, axy_offset, axy_label, 
+           axx_min, axx_max, axx_txt, axx_txt_size, axx_offset, axx_label);
+  hist.plot->SetMinimum(axz_min);
+  hist.plot->SetMaximum(axz_max);
+  hist.plot->GetZaxis()->SetTitle("Fraction");
+  hist.plot->GetZaxis()->SetNdivisions(505);
+  hist.plot->GetZaxis()->SetTitleSize(axz_txt_size);
+  hist.plot->GetZaxis()->SetTitleOffset(axz_offset);
+
+  // making the canvas
+  setH2Style();
+  gStyle->SetPalette( color_palette );
+
+  auto can = std::make_unique<TCanvas>("canvas", "canvas", 200, 10, 2000, 2000);
+  can->SetFrameFillColor(0); // transparent plot
+  can->SetFrameFillStyle(0); // transparent plot
+  can->SetFrameBorderMode(0); // transparent plot
+  can->SetFillColor(0); // transparent plot
+  can->SetFillStyle(0); // transparent plot
+  can->SetTopMargin(can_top_margin);
+  can->SetBottomMargin(can_bottom_margin);
+  can->SetLeftMargin(can_left_margin);
+  can->SetRightMargin(can_right_margin);
+
+  can->cd();
+  if (logX)
+    can->SetLogx();
+  if (logY)
+    can->SetLogy();
+  if (logZ)
+    can->SetLogz();
+
+  hist.plot->Draw("colz");
+  gPad->Update();
+  can->SaveAs( (filename + plotformat).c_str() );
+
+  // for tuning z axis size
+  //auto palette = std::unique_ptr<TPaletteAxis>(dynamic_cast<TPaletteAxis *>( hist.plot->GetListOfFunctions()->FindObject("palette") ));
+  TPaletteAxis *palette = (TPaletteAxis*) hist.plot->GetListOfFunctions()->FindObject("palette");
+  palette->SetX1NDC(axz_begin);
+  palette->SetX2NDC(axz_begin + axz_width);
+  gPad->Modified();
+  gPad->Update();
 
   can->RedrawAxis();
   can->SaveAs( (filename + plotformat).c_str() );
@@ -215,9 +434,9 @@ Plot<TGraph> efficiency_profile(const Plot<TH1> &hist, const bool efficiency = t
 
 
 // for the moment explicitly ignore the uncertainties in sig and bkg 
-Plot<TGraph> discrimination_profile(const std::vector<Plot<TH1>> &v_hist, const int sig = 0, const int bkg = 1,
+Plot<TGraph> discrimination_profile(const std::vector<Plot<TH1>> &v_hist, const uint sig = 0u, const uint bkg = 1u,
                                     const int color = kBlack, const std::string &legend_txt = "", const bool print_integral = false) {
-  if (v_hist.size() < 2 or sig < 0 or bkg < 0 or sig > v_hist.size() - 1 or bkg > v_hist.size() - 1) {
+  if (v_hist.size() < 2u or sig > v_hist.size() - 1u or bkg > v_hist.size() - 1u) {
     std::cout << "ERROR: discrimination_profile(): unsuitable argument set. Returning a null plot!!" << std::endl;
     return Plot<TGraph>();
   }
@@ -246,8 +465,8 @@ Plot<TGraph> discrimination_profile(const std::vector<Plot<TH1>> &v_hist, const 
   // where the polygon is closed by connecting the last and first points with a straight line
   // which for our ROCs is the line from (0, 1) to (1, 1) i.e. the worst possible ROC 
   if (print_integral) {
-    std::cout << "Integral of ROC curve " << name << " from signal/background index of " << sig << "/" << bkg 
-              << ": " << pl.plot->Integral() + 0.5 << std::endl;
+    std::cout << "Integral of ROC curve " << name << " from signal/background index of names " << 
+      v_hist[sig].plot->GetName() << "/" << v_hist[bkg].plot->GetName() << ": " << pl.plot->Integral() + 0.5 << std::endl;
   }
 
   return std::move(pl);

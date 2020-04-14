@@ -1,5 +1,6 @@
 // -*- C++ -*-
-// please refer to header for information
+// author: afiq anuar
+// short: please refer to header for information
 
 #include "EFTFitter.h"
 #include "PlotUtil.h"
@@ -11,8 +12,8 @@
 
 
 // ctors
-EFTFitter::EFTFitter(const std::string &dataName_, const double eftLambda_, 
-                     const Fit fitMode_, const Stat statMode_, const double shapeSum_) :
+EFTFitter::EFTFitter(const std::string &dataName_, const double &eftLambda_, 
+                     const Fit fitMode_, const Stat statMode_, const double &shapeSum_) :
   dataName(dataName_),
   hasData(false),
   eftLambda(eftLambda_),
@@ -42,7 +43,7 @@ EFTFitter::EFTFitter(const std::string &dataName_, const double eftLambda_,
 
 
 
-void EFTFitter::setShapeSum(const double shapeSum_)
+void EFTFitter::setShapeSum(const double &shapeSum_)
 {
   shapeSum = shapeSum_;
 }
@@ -107,10 +108,10 @@ void EFTFitter::addRawInput(const std::string &keyName, const Sample sampleType,
   std::unique_ptr<TH1D> sumHist(nullptr);
 
   // assign an xsec for intLumi normalization and if needed interpolation
-  const double xsec = normalizedSum.at(0);
+  const double &xsec = normalizedSum.at(0);
   if (fitMode != Fit::hybrid and xsec != 0. and sumStat == Stat::count) {
     sumHist = std::unique_ptr<TH1D>(dynamic_cast<TH1D *>( (file->Get( sumName.c_str() ))->Clone() ));
-    hist->Scale( intLumi * (xsec / sumHist->GetBinContent(1)) );
+    hist->Scale( FitUtil::intLumi * (xsec / sumHist->GetBinContent(1)) );
   }
 
   // get the integral, error, and normalized bin content
@@ -129,10 +130,10 @@ void EFTFitter::addRawInput(const std::string &keyName, const Sample sampleType,
       v_binContent = { {xsec, xerr}, {hsum, herr} };
     }
     else 
-      v_binContent = { {hsum / intLumi, herr / intLumi}, {hsum, herr} };
+      v_binContent = { {hsum / FitUtil::intLumi, herr / FitUtil::intLumi}, {hsum, herr} };
   }
   else if (sumStat == Stat::xsec)
-    v_binContent = { {hsum, herr}, {hsum * intLumi, herr * intLumi} };
+    v_binContent = { {hsum, herr}, {hsum * FitUtil::intLumi, herr * FitUtil::intLumi} };
 
   const std::vector<std::array<double, 2>> v_binNorm = FitUtil::extractContentError(hist.get());
   v_binContent.insert(std::end(v_binContent), std::begin(v_binNorm), std::end(v_binNorm));
@@ -222,7 +223,7 @@ void EFTFitter::addHybridData(const std::string &fileName, const std::string &hi
   auto hist = std::unique_ptr<TH1D>(dynamic_cast<TH1D *>(( file->Get( histName.c_str() ))->Clone(dataName.c_str()) ));
 
   // assign the xsec of the data
-  const double xsec = normalizedSum.at(0);
+  const double &xsec = normalizedSum.at(0);
 
   // make the initial content vector - first is xsec, second count
   std::vector<std::array<double, 2>> v_binContent;
@@ -230,7 +231,7 @@ void EFTFitter::addHybridData(const std::string &fileName, const std::string &hi
     // for counts just assume Poissonian stats if the user didn't put the error in
     const double xerr = (normalizedSum.at(1) > 0.) ? normalizedSum.at(1) : std::sqrt(xsec);
 
-    v_binContent = { {xsec / intLumi, xerr / intLumi}, {xsec, xerr} };
+    v_binContent = { {xsec / FitUtil::intLumi, xerr / FitUtil::intLumi}, {xsec, xerr} };
   }
   else if (sumStat == Stat::xsec) {
     const double xerr = (normalizedSum.at(1) > 0.) ? normalizedSum.at(1) : -1.;
@@ -239,7 +240,7 @@ void EFTFitter::addHybridData(const std::string &fileName, const std::string &hi
       throw std::invalid_argument( "Invalid error of normalizedSum not allowed when using Fit::hybrid "
                                    "with a valid normalizedSum value of Stat::xsec; please assign a valid error!!");
 
-    v_binContent = { {xsec, xerr}, {xsec * intLumi, xerr * intLumi} };
+    v_binContent = { {xsec, xerr}, {xsec * FitUtil::intLumi, xerr * FitUtil::intLumi} };
   }
 
   const std::vector<std::array<double, 2>> v_binNorm = FitUtil::extractContentError(hist.get());
@@ -259,7 +260,7 @@ void EFTFitter::addHybridData(const std::string &fileName, const std::string &hi
 
 void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample, std::string> > &vt_keySampleLegend,
                               const std::string &plotName, const std::string &yLabel, const std::string &xLabel,
-                              const double histMin, const double histMax, const double ratioMin, const double ratioMax,
+                              const double &histMin, const double &histMax, const double &ratioMin, const double &ratioMax,
                               const bool drawLogY, const std::string &legHeader, 
                               const bool divideBinWidth, const std::string &ratioMode)
 {
@@ -518,7 +519,7 @@ void EFTFitter::autoCovMatStatCorr()
 
 
 
-void EFTFitter::autoCovMatRate(const double rateUnc)
+void EFTFitter::autoCovMatRate(const double &rateUnc)
 {
   if (fitMode == Fit::hybrid) {
     std::cout << "Automatic matrix generation not supported in Fit::hybrid mode. Aborting..." << std::endl;
@@ -534,7 +535,7 @@ void EFTFitter::autoCovMatRate(const double rateUnc)
 
   // read off the data content
   const std::vector<std::array<double, 2>> &v_binC = m_binContent.at({dataName, Sample::all});
-  const double integral = (statMode == Stat::xsec) ? v_binC.at(0).at(0) : v_binC.at(1).at(0);
+  const double &integral = (statMode == Stat::xsec) ? v_binC.at(0).at(0) : v_binC.at(1).at(0);
   const int nBin = v_binC.size();
 
   // make the rate matrix with requested rate uncertainty parameter
@@ -820,7 +821,7 @@ void EFTFitter::prepareInterpolationBase()
       throw std::logic_error( "There are insufficient input to interpolate operator " + opName + "!!!");
 
     // get the value of the 1st and 2nd coeff of op
-    const double c1_op = v_xs_op1->first.at(iOp), c2_op = v_xs_op2->first.at(iOp);
+    const double &c1_op = v_xs_op1->first.at(iOp), &c2_op = v_xs_op2->first.at(iOp);
 
     // remember: binContent vector has the total count at 1 and normalized to 1 shape for the rest
     std::vector<std::array<double, 2>> v_opI(nBin, {0., 0.}), v_opR(nBin, {0., 0.});
@@ -890,7 +891,7 @@ void EFTFitter::prepareInterpolationBase()
         });
 
       // and the coeff values themselves
-      const double c_op1 = v_xs_op12->first.at(iOp1), c_op2 = v_xs_op12->first.at(iOp2);
+      const double &c_op1 = v_xs_op12->first.at(iOp1), &c_op2 = v_xs_op12->first.at(iOp2);
 
       // and it's the usual business again
       std::vector<std::array<double, 2>> v_op12(nBin, {0., 0.});
@@ -1153,7 +1154,7 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
     - 1;
 
   // 1 and 2 sigma band finder - always such that it's narrowest around minimum
-  const auto f_dChi2Band = [] (std::vector<double> &v_dChi2, const double dChi2Cut) {
+  const auto f_dChi2Band = [] (std::vector<double> &v_dChi2, const double &dChi2Cut) {
     // first U side
     // define the minimum iterator
     auto fMin = std::min_element(std::begin(v_dChi2), std::end(v_dChi2));
@@ -1215,6 +1216,7 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       if (av_opVal.at(iSamp).empty()) continue;
 
       // grab the index of the min chi2 and make the dChi2 vector
+      // note: due to the realloc below, DO NOT take references for opMin and chi2Min!!!
       const int iMin = std::distance(std::begin(av_opChi2.at(iSamp)), 
                                      std::min_element(std::begin(av_opChi2.at(iSamp)), std::end(av_opChi2.at(iSamp))));
       const double opMin = av_opVal.at(iSamp).at(iMin), chi2Min = av_opChi2.at(iSamp).at(iMin);
@@ -1226,6 +1228,7 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
         " with chi2/nDoF " << chi2Min << "/" << nDoF << ", with p-value " << chi2Prob << std::endl;
 
       // a bit of interlude in case no range is specified and so we do the dChi2-based range
+      // note: due to the realloc here, DO NOT take references for opMin and chi2Min!!!
       if (opRange.empty()) {
         // temp copy for storing the filtered vectors
         std::vector<double> tmp_opVal, tmp_opChi2, tmp_dChi2;
@@ -1554,7 +1557,7 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
         " with chi2/nDoF " << chi2Min << "/" << nDoF << ", with p-value " << chi2Prob << std::endl;
 
       // and the points going into 1, 2 sigma contours
-      // threshold is dChi2 containing 1 and 2 sigma for chi2 with 2 ndf (since we're fitting 1 op)
+      // threshold is dChi2 containing 1 and 2 sigma for chi2 with 2 ndf
       // obtained with 1. - TMath::Prob(raw_chi2, ndf)
       const double dChi2Sig1 = 2.295743, dChi2Sig2 = 6.180063;
       std::vector<std::array<double, 2>> v_opSig1, v_opSig2;
@@ -1824,7 +1827,7 @@ void EFTFitter::autoCovMatStatBin()
   }
 
   const std::vector<std::array<double, 2>> &dataC = m_binContent.at({dataName, Sample::all});
-  const double integral = (fitMode == Fit::shape) ? shapeSum : (statMode == Stat::xsec) ? dataC.at(0).at(0) : dataC.at(1).at(0);
+  const double &integral = (fitMode == Fit::shape) ? shapeSum : (statMode == Stat::xsec) ? dataC.at(0).at(0) : dataC.at(1).at(0);
   const int nBin = dataC.size();
 
   TMatrixD tmpMat(nBin - 2, nBin - 2);
@@ -1912,13 +1915,13 @@ void EFTFitter::assignInSituXsec(std::vector<std::array<double, 2>> &v_binConten
   if (v_binContent.at(0).at(0) != 0. and v_binContent.at(1).at(0) != 0.) return;
 
   if (v_binContent.at(0).at(0) == 0.) {
-    v_binContent.at(0).at(0) = v_binContent.at(1).at(0) / intLumi;
-    v_binContent.at(0).at(1) = v_binContent.at(1).at(1) / intLumi;
+    v_binContent.at(0).at(0) = v_binContent.at(1).at(0) / FitUtil::intLumi;
+    v_binContent.at(0).at(1) = v_binContent.at(1).at(1) / FitUtil::intLumi;
   }
 
   if (v_binContent.at(1).at(0) == 0.) {
-    v_binContent.at(1).at(0) = v_binContent.at(0).at(0) * intLumi;
-    v_binContent.at(1).at(1) = v_binContent.at(0).at(1) * intLumi;
+    v_binContent.at(1).at(0) = v_binContent.at(0).at(0) * FitUtil::intLumi;
+    v_binContent.at(1).at(1) = v_binContent.at(0).at(1) * FitUtil::intLumi;
   }
 }
 
@@ -2009,7 +2012,7 @@ std::vector<std::array<double, 2>> EFTFitter::interpolateOpValue(const std::stri
       if (varyWithinError) {
         // get variation of SM + linear and quadratic separately
         // done this way since linear might be negative, so can't take it independently
-        const double scale = (statMode == Stat::xsec) ? intLumi : 1.;
+        const double scale = (statMode == Stat::xsec) ? FitUtil::intLumi : 1.;
         const double count0I = scale * (xs_op0 + (xs_opI / sqLambda));
         const double countR = scale * (xs_opR / quLambda);
 
@@ -2022,7 +2025,7 @@ std::vector<std::array<double, 2>> EFTFitter::interpolateOpValue(const std::stri
 
       if (varyWithinError) {
         // comment at all part
-        const double scale = (statMode == Stat::xsec) ? intLumi : 1.;
+        const double scale = (statMode == Stat::xsec) ? FitUtil::intLumi : 1.;
         const double count0I = scale * (xs_op0 + (xs_opI / sqLambda));
 
         v_intResult.at(iB).at(0) -= getDPoissonVariation(count0I) / scale;
@@ -2034,7 +2037,7 @@ std::vector<std::array<double, 2>> EFTFitter::interpolateOpValue(const std::stri
 
       if (varyWithinError) {
         // comment at all part
-        const double scale = (statMode == Stat::xsec) ? intLumi : 1.;
+        const double scale = (statMode == Stat::xsec) ? FitUtil::intLumi : 1.;
         const double count0 = scale * xs_op0;
         const double countR = scale * (xs_opR / quLambda);
 

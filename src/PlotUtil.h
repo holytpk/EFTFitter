@@ -176,7 +176,7 @@ void axisPlot(Plot *plot,
   plot->GetXaxis()->SetTitleSize(xSiz);
   plot->GetXaxis()->SetTitleOffset(xOff);
   plot->GetXaxis()->SetLabelSize(xLab);
-  plot->GetXaxis()->SetNdivisions(507);
+  plot->GetXaxis()->SetNdivisions(505);
 }
 
 

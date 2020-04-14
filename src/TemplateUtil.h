@@ -214,7 +214,7 @@ std::vector<Value> extractValueIf(const std::map<Key, Value> &map, Predicate pre
 
 
 
-/// this overload is for printAll to correctly print pair-types
+/// this overload is for printAll to correctly print pairs
 template <typename One, typename Two> 
 std::ostream& operator<<(std::ostream& out, const std::pair<One, Two> &pair)
 {
@@ -246,7 +246,7 @@ template <template <typename, typename...> class Container, typename Value, type
 void printAll(const Container<Value, Args...> &con)
 {
   for (const auto &ele : con)
-    std::cout << ele << std::endl;
+    std::cout << ele << "\n";
   std::cout << std::endl;
 }
 

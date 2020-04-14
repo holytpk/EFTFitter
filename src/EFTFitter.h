@@ -1,15 +1,13 @@
 // -*- C++ -*-
-// takes templates from MC and data, performs some chi2 fit to set constraints on EFT operators
-// includes some methods for plotting output
-// updated 31/08/2018
+// author: afiq anuar
+// short: takes templates from MC and data, performs some chi2 fit to set constraints on EFT operators
+// todo: it may be useful to save the weight vector of each dofs in the chi2
 
 #ifndef EFTFITTER_H
 #define EFTFITTER_H
 
 #include "TemplateUtil.h"
-
 #include <random>
-#include <chrono>
 
 #include "TMath.h"
 #include "TMatrixD.h"
@@ -34,11 +32,11 @@ class EFTFitter {
   };
 
   /// constructors
-  EFTFitter(const std::string &dataName_, const double eftLambda_ = 1., 
-            const Fit fitMode_ = Fit::absolute, const Stat statMode_ = Stat::xsec, const double shapeSum_ = 1.);
+  EFTFitter(const std::string &dataName_, const double &eftLambda_ = 1., 
+            const Fit fitMode_ = Fit::absolute, const Stat statMode_ = Stat::xsec, const double &shapeSum_ = 1.);
 
   /// self-explanatory
-  void setShapeSum(const double shapeSum_ = 1.);
+  void setShapeSum(const double &shapeSum_ = 1.);
 
   // what kind of sample we're working with
   enum class Sample : int {
@@ -82,7 +80,7 @@ class EFTFitter {
   /// covariance mode will only work if final covariance matrix is already available
   void drawHistogram(const std::vector< std::tuple<std::string, Sample, std::string> > &vt_keySampleLegend,
                      const std::string &plotName, const std::string &yLabel, const std::string &xLabel,
-                     const double histMin, const double histMax, const double ratioMin, const double ratioMax, 
+                     const double &histMin, const double &histMax, const double &ratioMin, const double &ratioMax, 
                      const bool drawLogY = false, const std::string &legHeader = "", 
                      const bool divideBinWidth = false, const std::string &ratioMode = "simple");
 
@@ -91,7 +89,7 @@ class EFTFitter {
 
   /// make automatic covariance matrix of data sample base on rate uncertainties (e. g. lumi)
   /// matrix coeff c_ij = sq(rateUnc * rateUnc * content of bin i * content of bin j)
-  void autoCovMatRate(const double rateUnc = 0.01);
+  void autoCovMatRate(const double &rateUnc = 0.01);
 
   /// read covariance matrix from a root file (assumes it's stored as TH2, can also select parts of it)
   void readCovMatRoot(const std::string &keyMat, const std::string &fileName, const std::string &histName,
@@ -216,9 +214,6 @@ class EFTFitter {
   /// what should the templates sum up to in case of shape comparison
   double shapeSum;
 
-  /// int lumi for normalization
-  static constexpr double intLumi = 35922.;
-
   /// set of operator names
   std::vector<std::string> v_opName;
 
@@ -265,6 +260,9 @@ namespace FitUtil {
 
   /// extract the bin contents and errors of a hist (assumes symmetrical errors)
   std::vector<std::array<double, 2>> extractContentError(TH1 *hist);
+
+  /// int lumi for normalization
+  static constexpr double intLumi = 35922.;
 }
 
 
@@ -310,7 +308,7 @@ inline std::ostream& operator<<(std::ostream& out, const EFTFitter::Sample &samp
 
 
 
-/// this overload is for printAll to print twin numbers (val, err or x, y what else...) without resorting to printAll
+/// this overload is to print twin numbers (val, err or x, y what else...) without using printAll
 template <typename Content> std::ostream& operator<<(std::ostream& out, const std::array<Content, 2> &array)
 {
   out << array.at(0) << ", " << array.at(1);
