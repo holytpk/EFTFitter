@@ -1122,7 +1122,7 @@ void EFTFitter::saveFitChi2(const std::string &fileName)
     throw std::logic_error( "This method shouldn't be called before the computeFitChi2() method!!" );
 
   auto file = std::make_unique<TFile>((fileName + "_chi2.root").c_str(), "recreate");
-  auto tree = std::make_unique<TTree>("fit_chi2", "");
+  auto tree = std::make_unique<TTree>("fit_chi2", "", 505);
   tree->SetAutoSave(0);
   tree->SetImplicitMT(false);
 
