@@ -124,6 +124,9 @@ class EFTFitter {
   /// also which bin to ignore in case of shape fit (for the automatic bin dropper algo)
   void computeFitChi2(const std::vector<Sample> &v_sample = {Sample::all, Sample::linear}, int binToIgnore = 1);
 
+  /// save the computed chi2 into a tree
+  void saveFitChi2(const std::string &fileName = "./fit");
+
   /// FIXME in their current forms, drawNDChi2 methods are extremely inefficient
   /// FIXME handling of output file names is awkward at best
   /// FIXME restriction of drawing each operator once per invocation is also terrible

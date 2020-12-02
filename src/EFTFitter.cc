@@ -4,6 +4,7 @@
 
 #include "EFTFitter.h"
 #include "PlotUtil.h"
+#include "TTree.h"
 
 /***
  * EFTFitter source (public)
@@ -274,7 +275,7 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
   if (ratioMode != "simple" and ratioMode != "covariance" and ratioMode != "none")
     throw std::logic_error( "Ratio mode not understood: only simple, covariance or none are allowed!" );
   const bool noRatio = (ratioMode == "none"), useCov = (ratioMode == "covariance");
-  if (useCov and !m_covMat.count("finalCov"))
+  if (useCov and !m_covMat.count("finalcov"))
     throw std::logic_error( "Final covariance matrix must be available to use covariance ratio mode!!" );
 
   std::cout << "Drawing the requested key-sample templates " << "..." << std::endl;
@@ -324,7 +325,7 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
 
     if (useCov) {
       hrat->Add(htmp.get(), m_hist.at({dataName, Sample::all}).get(), 1., -1.);
-      TMatrixD covmat(m_covMat.at("finalCov"));
+      TMatrixD covmat(m_covMat.at("finalcov"));
 
       // for shape, drop all non-diagonals (inaccurate, but for visualization it's probably alright)
       if (fitMode == Fit::shape) {
@@ -372,15 +373,15 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
 
     if (noRatio) {
       axisPlot(m_hist.at({key, samp}).get(), 
-               histMin, histMax, yLabel, 0.043, 1.21, 0.037, 0., 0., xLabel, 0.043, 1.11, 0.037);
+               histMin, histMax, 505, yLabel, 0.043, 1.21, 0.037, 0., 0., 505, xLabel, 0.043, 1.11, 0.037);
       axisPlot(m_ratio.at({key, samp}).get(), 
-               ratioMin, ratioMax, rLabel, 0.121, 0.41, 0.093, 0., 0., xLabel, 0.131, 0.71, 0.107);
+               ratioMin, ratioMax, 505, rLabel, 0.121, 0.41, 0.093, 0., 0., 505, xLabel, 0.131, 0.71, 0.107);
     }
     else {
       axisPlot(m_hist.at({key, samp}).get(), 
-               histMin, histMax, yLabel, 0.059, 0.73, 0.047, 0., 0., xLabel, 0.037, 1.15, 0.033);
+               histMin, histMax, 505, yLabel, 0.059, 0.73, 0.047, 0., 0., 505, xLabel, 0.037, 1.15, 0.033);
       axisPlot(m_ratio.at({key, samp}).get(), 
-               ratioMin, ratioMax, rLabel, rTitle, rOffset, 0.093, 0., 0., xLabel, 0.131, 0.71, 0.107);
+               ratioMin, ratioMax, 505, rLabel, rTitle, rOffset, 0.093, 0., 0., 505, xLabel, 0.131, 0.71, 0.107);
     }
   }
 
@@ -608,9 +609,9 @@ void EFTFitter::readCovMatRoot(const std::string &keyMat, const std::string &fil
 void EFTFitter::makeFinalCovMat(const std::function<TMatrixD (const std::map<std::string, TMatrixD> &)> &func)
 {
   // warn if already available and erase
-  if (m_covMat.count("finalCov")) {
+  if (m_covMat.count("finalcov")) {
     std::cout << "Final covariance matrix already available, overwriting it..." << std::endl;
-    m_covMat.erase("finalCov");
+    m_covMat.erase("finalcov");
   }
 
   std::cout << "Making the final covariance matrix with the given function..." << std::endl << std::endl;
@@ -621,7 +622,7 @@ void EFTFitter::makeFinalCovMat(const std::function<TMatrixD (const std::map<std
   f_finalCov = func;
 
   // just apply the function passed by the user and tack the result onto the map
-  m_covMat.insert({"finalCov", f_finalCov(m_covMat)});
+  m_covMat.insert({"finalcov", f_finalCov(m_covMat)});
 }
 
 
@@ -649,15 +650,15 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
   }
 
   // create a file in which to save the matrices
-  auto file = std::make_unique<TFile>((dirName + "covMat_all.root").c_str(), "recreate");
+  auto file = std::make_unique<TFile>((dirName + "cov_all.root").c_str(), "recreate");
 
   const int nBin = std::begin(m_covMat)->second.GetNrows();
 
   for (const auto &p_covMat : m_covMat) {
     if (!v_keyMat.empty() and !std::count(std::begin(v_keyMat), std::end(v_keyMat), p_covMat.first)) continue;
 
-    auto h_cMat = std::make_unique<TH2D>(("covMat_" + p_covMat.first).c_str(), "", nBin, 0., nBin, nBin + 1, 0., nBin + 1.);
-    std::ofstream t_cMat(dirName + "covMat_" + p_covMat.first + ".txt");
+    auto h_cMat = std::make_unique<TH2D>(("cov_" + p_covMat.first).c_str(), "", nBin, 0., nBin, nBin, 0., nBin);
+    std::ofstream t_cMat(dirName + "cov_" + p_covMat.first + ".txt");
 
     for (int iR = 0; iR < nBin; ++iR) {
       for (int iC = 0; iC < nBin; ++iC) {
@@ -674,7 +675,7 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
     t_cMat.close();
 
     stylePlot(h_cMat.get(), kBlack, 1., 0, 20, 1.5, 1, 1); // 3rd last arg is marker size, affects text size too...
-    axisPlot(h_cMat.get(), 0., 0., "Column", 0.043, 1.11, 0.037, 0., 0., "Row", 0.043, 1.11, 0.037);
+    axisPlot(h_cMat.get(), 0., 0., 505, "Column", 0.043, 1.11, 0.037, 0., 0., 505, "Row", 0.043, 1.11, 0.037);
 
     // apply style - reminder: palette with dark colors in one end likely looks bad for matrices with elements of both sign
     setH2Style();
@@ -700,8 +701,8 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
 
     h_cMat->Draw(drawOpt.c_str());
 
-    can->SaveAs((dirName + "covMat_" + p_covMat.first + ".pdf").c_str());
-    //can->SaveAs((dirName + "covMat_" + p_covMat.first + ".C").c_str());
+    can->SaveAs((dirName + "cov_" + p_covMat.first + ".pdf").c_str());
+    //can->SaveAs((dirName + "cov_" + p_covMat.first + ".C").c_str());
 
     file->cd();
     //can->Write();
@@ -715,7 +716,7 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
 
 std::array<double, 2> EFTFitter::getDataRate() const
 {
-  if (!hasData or fitMode != Fit::absolute or m_covMat.count("finalCov") == 0) {
+  if (!hasData or fitMode != Fit::absolute or m_covMat.count("finalcov") == 0) {
     std::cout << "Method is useless if not doing absolute fit or "
       "there is no data template or final covariance matrix!! Returning junk!!" << std::endl;
     return {0., 0.};
@@ -729,7 +730,7 @@ std::array<double, 2> EFTFitter::getDataRate() const
     rowM(0, iB) = 1.;
 
   // and we do exactly that
-  TMatrixD rateCov(rowM, TMatrixD::kMult, TMatrixD(m_covMat.at("finalCov"), TMatrixD::kMultTranspose, rowM));
+  TMatrixD rateCov(rowM, TMatrixD::kMult, TMatrixD(m_covMat.at("finalcov"), TMatrixD::kMultTranspose, rowM));
   //std::cout << rateCov.GetNrows() << " " << rateCov.GetNcols() << std::endl;
   return {m_binContent.at({dataName, Sample::all}).at(iXs).at(0), std::sqrt(rateCov(0, 0))};
 }
@@ -1010,7 +1011,7 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
 {
   const bool rateFit = (fitMode == Fit::hybrid and v_rawBin.empty());
 
-  if (!hasData or v_keyToFit.empty() or (!m_covMat.count("finalCov") and !rateFit))
+  if (!hasData or v_keyToFit.empty() or (!m_covMat.count("finalcov") and !rateFit))
     throw std::range_error( "This method shouldn't be called given the insuffiencient input! "
                             "Ensure contents (inserted with addRawInput() or interpolatable with prepareInterpolationBase()), "
                             "list of keys to be fitted on (made with listKeyToFit()) "
@@ -1042,8 +1043,8 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
     ;
   else if (fitMode != Fit::shape) {
     // must resize before copy-assign: https://root.cern.ch/how/how-create-and-fill-matrix
-    invMat.ResizeTo(m_covMat.at("finalCov"));
-    invMat = m_covMat.at("finalCov");
+    invMat.ResizeTo(m_covMat.at("finalcov"));
+    invMat = m_covMat.at("finalcov");
   }
   else {
     invMat.ResizeTo(nBin - 2 - nHist, nBin - 2 - nHist);
@@ -1058,7 +1059,7 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
       for (int iAbsC = 0; iAbsC < nBin - 2; ++iAbsC) {
         if (iAbsC % nBinEach == binToIgnore) continue;
 
-        invMat(iShpR, iShpC) = m_covMat.at("finalCov")(iAbsR, iAbsC);
+        invMat(iShpR, iShpC) = m_covMat.at("finalcov")(iAbsR, iAbsC);
         ++iShpC;
       }
 
@@ -1111,6 +1112,41 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
   }
 
   //printAll(m_fitChi2);
+}
+
+
+
+void EFTFitter::saveFitChi2(const std::string &fileName)
+{
+  if (m_fitChi2.empty())
+    throw std::logic_error( "This method shouldn't be called before the computeFitChi2() method!!" );
+
+  auto file = std::make_unique<TFile>((fileName + "_chi2.root").c_str(), "recreate");
+  auto tree = std::make_unique<TTree>("fit_chi2", "");
+  tree->SetAutoSave(0);
+  tree->SetImplicitMT(false);
+
+  std::vector<double> v_opVal(v_opName.size());
+  double chi2 = 0.;
+  int sample = -1;
+  for (uint iOp = 0; iOp < v_opName.size(); ++iOp)
+    tree->Branch(v_opName[iOp].c_str(), &v_opVal[iOp], (v_opName[iOp] + "/D").c_str());
+  tree->Branch("chi2", &chi2, "chi2/D");
+  tree->Branch("sample", &sample, "sample/I");
+
+  for (const auto &p_fitChi2 : m_fitChi2) {
+    const std::vector<double> v_opTmp = extractValue( parseOpFromKey(p_fitChi2.first.first) );
+    sample = static_cast<int>(p_fitChi2.first.second);
+
+    chi2 = p_fitChi2.second;
+    for (uint iOp = 0; iOp < v_opName.size(); ++iOp)
+      v_opVal[iOp] = v_opTmp[iOp];
+
+    tree->Fill();
+  }
+
+  file->cd();
+  tree->Write();
 }
 
 
@@ -1254,8 +1290,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       ag_dChi2.at(iSamp) = std::make_unique<TGraph>(av_opVal.at(iSamp).size(), av_opVal.at(iSamp).data(), av_dChi2.at(iSamp).data());
       stylePlot(ag_dChi2.at(iSamp).get(), kBlack, 1., 0, 20, 1.5, a_sampStyL.at(iSamp), 2);
       axisPlot(ag_dChi2.at(iSamp).get(), 
-               yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
-               xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
+               yRange.at(0), yRange.at(1), 505, "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
+               xRange.at(0), xRange.at(1), 505, opLeg.c_str(), 0.043, 1.11, 0.037);
       ag_dChi2.at(iSamp)->SetName((opName + "_" + toStr(samp)).c_str());
       ag_dChi2.at(iSamp)->SetTitle("");
 
@@ -1323,8 +1359,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
                                                                        a_zero.data(), a_zero.data(), a_zero.data(), a_zero.data());
         stylePlot(ag_sigma.at(iSamp).at(0).get(), kBlack, 1., 0, 20, 1.5, 8, 2);
         axisPlot(ag_sigma.at(iSamp).at(0).get(), 
-                 yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
-                 xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
+                 yRange.at(0), yRange.at(1), 505, "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
+                 xRange.at(0), xRange.at(1), 505, opLeg.c_str(), 0.043, 1.11, 0.037);
         ag_sigma.at(iSamp).at(0)->SetName((opName + "_sigma0_" + toStr(samp)).c_str());
         ag_sigma.at(iSamp).at(0)->SetTitle("");
 
@@ -1333,8 +1369,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
                                                                        a_1SigD.data(), a_1SigU.data(), a_vErrD.data(), a_vErrU.data());
         stylePlot(ag_sigma.at(iSamp).at(1).get(), kGreen + 1, 1., 1001, 0, 1.5, 1, 2);
         axisPlot(ag_sigma.at(iSamp).at(1).get(), 
-                 yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
-                 xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
+                 yRange.at(0), yRange.at(1), 505, "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
+                 xRange.at(0), xRange.at(1), 505, opLeg.c_str(), 0.043, 1.11, 0.037);
         ag_sigma.at(iSamp).at(1)->SetName((opName + "_sigma1_" + toStr(samp)).c_str());
         ag_sigma.at(iSamp).at(1)->SetTitle("");
 
@@ -1343,8 +1379,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
           ag_sigma.at(iSamp).at(2) = std::make_unique<TGraphAsymmErrors>(2, a_opMin.data(), a_vPnt.data(), 
                                                                          a_2SigD.data(), a_2SigU.data(), a_vErrD.data(), a_vErrU.data());
           axisPlot(ag_sigma.at(iSamp).at(2).get(), 
-                   yRange.at(0), yRange.at(1), "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
-                   xRange.at(0), xRange.at(1), opLeg.c_str(), 0.043, 1.11, 0.037);
+                   yRange.at(0), yRange.at(1), 505, "#Delta #chi^{2}", 0.043, 1.21, 0.037, 
+                   xRange.at(0), xRange.at(1), 505, opLeg.c_str(), 0.043, 1.11, 0.037);
           stylePlot(ag_sigma.at(iSamp).at(2).get(), kOrange, 1., 1001, 0, 1.5, 1, 2);
           ag_sigma.at(iSamp).at(2)->SetName((opName + "_sigma2_" + toStr(samp)).c_str());
           ag_sigma.at(iSamp).at(2)->SetTitle("");
@@ -1545,8 +1581,8 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       ag_sigma0.at(iSamp) = std::make_unique<TGraph>(1, v_op2Sig0.data(), v_op1Sig0.data());
       stylePlot(ag_sigma0.at(iSamp).get(), a_sampCol0.at(iSamp), 1., 0, a_sampStyM.at(iSamp), 2.5, a_sampStyL.at(iSamp), 3);
       axisPlot(ag_sigma0.at(iSamp).get(), 
-               op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-               op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+               op1Range.at(0), op1Range.at(1), 505, op1Leg.c_str(), 0.043, 1.21, 0.037, 
+               op2Range.at(0), op2Range.at(1), 505, op2Leg.c_str(), 0.043, 1.11, 0.037);
       ag_sigma0.at(iSamp)->SetName((op1Name + "_" + op2Name + "_sigma0_" + toStr(samp)).c_str());
       ag_sigma0.at(iSamp)->SetTitle("");
       leg->AddEntry(ag_sigma0.at(iSamp).get(), ("Best fit" + a_sampLeg.at(iSamp)).c_str(), "p");
@@ -1678,16 +1714,16 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       ag_sigma1.at(iSamp) = std::make_unique<TGraph>(v_op1Sig1.size(), v_op2Sig1.data(), v_op1Sig1.data());
       stylePlot(ag_sigma1.at(iSamp).get(), a_sampCol1.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 4);
       axisPlot(ag_sigma1.at(iSamp).get(), 
-               op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-               op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+               op1Range.at(0), op1Range.at(1), 505, op1Leg.c_str(), 0.043, 1.21, 0.037, 
+               op2Range.at(0), op2Range.at(1), 505, op2Leg.c_str(), 0.043, 1.11, 0.037);
       ag_sigma1.at(iSamp)->SetName((op1Name + "_" + op2Name + "_sigma1_" + toStr(samp)).c_str());
       ag_sigma1.at(iSamp)->SetTitle("");
 
       ag_sigma2.at(iSamp) = std::make_unique<TGraph>(v_op1Sig2.size(), v_op2Sig2.data(), v_op1Sig2.data());
       stylePlot(ag_sigma2.at(iSamp).get(), a_sampCol2.at(iSamp), 0.43, a_sampStyF.at(iSamp), 0, 2.5, a_sampStyL.at(iSamp), 4);
       axisPlot(ag_sigma2.at(iSamp).get(), 
-               op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-               op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+               op1Range.at(0), op1Range.at(1), 505, op1Leg.c_str(), 0.043, 1.21, 0.037, 
+               op2Range.at(0), op2Range.at(1), 505, op2Leg.c_str(), 0.043, 1.11, 0.037);
       ag_sigma2.at(iSamp)->SetName((op1Name + "_" + op2Name + "_sigma2_" + toStr(samp)).c_str());
       ag_sigma2.at(iSamp)->SetTitle("");
     }
@@ -1697,16 +1733,16 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
     ag_zero.at(0) = std::make_unique<TGraph>(2, op2Range.data(), a_zero.data());
     stylePlot(ag_zero.at(0).get(), kGray + 2, 1., 0, 0, 2.5, 1, 1);
     axisPlot(ag_zero.at(0).get(), 
-             op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-             op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+             op1Range.at(0), op1Range.at(1), 505, op1Leg.c_str(), 0.043, 1.21, 0.037, 
+             op2Range.at(0), op2Range.at(1), 505, op2Leg.c_str(), 0.043, 1.11, 0.037);
     ag_zero.at(0)->SetName((op1Name + "_" + op2Name + "_xX_y0").c_str());
     ag_zero.at(0)->SetTitle("");
 
     ag_zero.at(1) = std::make_unique<TGraph>(2, a_zero.data(), op1Range.data());
     stylePlot(ag_zero.at(1).get(), kGray + 2, 1., 0, 0, 2.5, 1, 1);
     axisPlot(ag_zero.at(1).get(), 
-             op1Range.at(0), op1Range.at(1), op1Leg.c_str(), 0.043, 1.21, 0.037, 
-             op2Range.at(0), op2Range.at(1), op2Leg.c_str(), 0.043, 1.11, 0.037);
+             op1Range.at(0), op1Range.at(1), 505, op1Leg.c_str(), 0.043, 1.21, 0.037, 
+             op2Range.at(0), op2Range.at(1), 505, op2Leg.c_str(), 0.043, 1.11, 0.037);
     ag_zero.at(1)->SetName((op1Name + "_" + op2Name + "_x0_yY").c_str());
     ag_zero.at(1)->SetTitle("");
 

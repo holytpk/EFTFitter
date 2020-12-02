@@ -156,9 +156,9 @@ void stylePlot(Plot *plot,
 
 template <typename Plot>
 void axisPlot(Plot *plot,
-              const double yMin, const double yMax,
+              const double yMin, const double yMax, const int yDiv,
               const std::string &yTxt, const double ySiz, const double yOff, const double yLab,
-              const double xMin, const double xMax,
+              const double xMin, const double xMax, const int xDiv,
               const std::string &xTxt, const double xSiz, const double xOff, const double xLab) 
 {
   // if we don't want the range setter, just give an invalid range
@@ -170,13 +170,13 @@ void axisPlot(Plot *plot,
   plot->GetYaxis()->SetTitleSize(ySiz);
   plot->GetYaxis()->SetTitleOffset(yOff);
   plot->GetYaxis()->SetLabelSize(yLab);
-  plot->GetYaxis()->SetNdivisions(507);
+  plot->GetYaxis()->SetNdivisions(yDiv);
 
   plot->GetXaxis()->SetTitle(xTxt.c_str());
   plot->GetXaxis()->SetTitleSize(xSiz);
   plot->GetXaxis()->SetTitleOffset(xOff);
   plot->GetXaxis()->SetLabelSize(xLab);
-  plot->GetXaxis()->SetNdivisions(505);
+  plot->GetXaxis()->SetNdivisions(xDiv);
 }
 
 

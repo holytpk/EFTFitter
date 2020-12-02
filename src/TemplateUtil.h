@@ -40,7 +40,7 @@ Number quad_sum(const Number num1, const Number num2)
 
 
 
-/// as it says on the tin
+/// actually abs(dphi)
 template <typename Number>
 Number deltaPhi(const Number phi1, const Number phi2) 
 {
