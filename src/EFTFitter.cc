@@ -627,6 +627,27 @@ void EFTFitter::makeFinalCovMat(const std::function<TMatrixD (const std::map<std
 
 
 
+void EFTFitter::makeFinalCovMat(std::vector<std::string> &&names)
+{
+  if (names.empty()) {
+    std::cout << "Empty list of covariance matrix names given, doing nothing..." << std::endl;
+    return;
+  }
+
+  // warn if already available and erase
+  if (m_covMat.count("finalcov")) {
+    std::cout << "Final covariance matrix already available, overwriting it..." << std::endl;
+    m_covMat.erase("finalcov");
+  }
+
+  TMatrixD finalmat(map.at(names[0]));
+  for (int iname = 1; iname < names.size(); ++iname)
+    finalmat += map.at(names[iname]);
+  m_covMat.insert({"finalcov", finalmat});
+}
+
+
+
 void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::string> &v_keyMat) const
 {
   // quick checks to ensure we don't make unnecessary files

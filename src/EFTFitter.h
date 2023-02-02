@@ -101,6 +101,10 @@ class EFTFitter {
   /// somehow it works for the free templates though; related to namespace blocking? hmm...
   void makeFinalCovMat(const std::function<TMatrixD (const std::map<std::string, TMatrixD> &)> &func);
 
+  /// trivial case of final covmat being the sum of everything else that was read in
+  /// why was this not in there right at the beginning???
+  void makeFinalCovMat(std::vector<std::string> &&names);
+
   /// draw the covariance matrices (if no keys provided, draw all available in the map)
   void drawCovMat(const std::string &dirName = "./", const std::vector<std::string> &v_keyMat = {}) const;
 
