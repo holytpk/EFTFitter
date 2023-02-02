@@ -103,7 +103,7 @@ class EFTFitter {
 
   /// trivial case of final covmat being the sum of everything else that was read in
   /// why was this not in there right at the beginning???
-  void makeFinalCovMat(std::vector<std::string> &&names);
+  void makeFinalCovMat(std::vector<std::string> &&names = {});
 
   /// draw the covariance matrices (if no keys provided, draw all available in the map)
   void drawCovMat(const std::string &dirName = "./", const std::vector<std::string> &v_keyMat = {}) const;

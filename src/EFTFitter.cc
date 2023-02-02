@@ -629,10 +629,13 @@ void EFTFitter::makeFinalCovMat(const std::function<TMatrixD (const std::map<std
 
 void EFTFitter::makeFinalCovMat(std::vector<std::string> &&names)
 {
-  if (names.empty()) {
-    std::cout << "Empty list of covariance matrix names given, doing nothing..." << std::endl;
+  if (m_covMat.empty()) {
+    std::cout << "This method do nothing if no matrices have been read in/created..." << std::endl;
     return;
   }
+
+  if (names.empty())
+    std::cout << "Empty list of covariance matrix names given, assuming that final cov is the sum of all existing matrices..." << std::endl;
 
   // warn if already available and erase
   if (m_covMat.count("finalcov")) {
