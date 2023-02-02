@@ -643,9 +643,9 @@ void EFTFitter::makeFinalCovMat(std::vector<std::string> &&names)
     m_covMat.erase("finalcov");
   }
 
-  TMatrixD finalmat(map.at(names[0]));
+  TMatrixD finalmat(m_covMat.at(names[0]));
   for (int iname = 1; iname < names.size(); ++iname)
-    finalmat += map.at(names[iname]);
+    finalmat += m_covMat.at(names[iname]);
   m_covMat.insert({"finalcov", finalmat});
 }
 
