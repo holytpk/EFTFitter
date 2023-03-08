@@ -1,9 +1,10 @@
 EFTFitter framework to perform chi2 tests on EFT templates
 
 Requirements
-- C++14 compiler or later
+- C++17 compiler or later
 - ROOT6
-- development and production were done under gcc 6.2.0 and ROOT 6.12/04 and 6.14/00
+- original development and production were done under C++14 gcc 6.2.0 and ROOT 6.12/04 and 6.14/00
+- current version bumped to C++17 gcc 10.1.0 and 6.24/00, future development will happen only on this or later standard
 
 Notes
 - execution is based on putting together an execution macro and compiling it with the source
@@ -22,5 +23,5 @@ To-do (in no particular order)
 - settings related to file saving
 
 Feedback and/or bug report are welcome
-Updated	02/12/2020
+Updated	08/03/2023
 

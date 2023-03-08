@@ -2256,7 +2256,7 @@ std::unique_ptr<TH1D> EFTFitter::convertContentToHist(const std::string &keyName
     hist->SetBinError( iB, binErr / binWid );
   }
 
-  return std::move(hist);
+  return hist;
 }
 
 
