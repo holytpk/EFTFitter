@@ -1091,7 +1091,7 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
     }
   }
 
-  //std::cout << "" << TDecompLU(invMat).Condition() << std::endl;
+  // std::cout << "" << TDecompLU(invMat).Condition() << std::endl; // condition number of the matrix
   invMat.Invert();
 
   for (const auto &key : v_keyToFit) {
@@ -1101,28 +1101,31 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
 
       // here they're used as offset counters; increment every time a bin is ignored
       int iShpR = 0, iShpC = 0;
-
       double fitChi2 = 0.;
-
       for (int iAbsR = 2; iAbsR < nBin; ++iAbsR) {
         if (fitMode == Fit::shape and ((iAbsR - 2) % nBinEach == binToIgnore)) {
           ++iShpR;
           continue;
         }
 
+        // the actual matrix index, which is strictly related to the actual row/col indices and offset
+        // but doing it like this improves readability slightly
+        int iMatR = iAbsR - 2 - iShpR;
+
         iShpC = 0;
-        for (int iAbsC = 2; iAbsC < nBin; ++iAbsC) {
+        for (int iAbsC = iAbsR; iAbsC < nBin; ++iAbsC) {
           if (fitMode == Fit::shape and ((iAbsC - 2) % nBinEach == binToIgnore)) {
             ++iShpC;
             continue;
           }
+          int iMatC = iAbsC - 2 - iShpC;
+          double factor = (iMatR == iMatC) ? 1. : 2.;
 
           // first compute the bin differences
           const double deltaR = (dataInt * dataContent.at(iAbsR).at(0)) - (opInt * opContent.at(iAbsR).at(0));
           const double deltaC = (dataInt * dataContent.at(iAbsC).at(0)) - (opInt * opContent.at(iAbsC).at(0));
 
-          //std::cout << iAbsR << " " << iAbsC << " " << iShpR << " " << iShpC << std::endl;
-          fitChi2 += deltaR * deltaC * invMat(iAbsR - 2 - iShpR, iAbsC - 2 - iShpC);
+          fitChi2 += deltaR * deltaC * invMat(iMatR, iMatC) * factor;
         }
       }
 
