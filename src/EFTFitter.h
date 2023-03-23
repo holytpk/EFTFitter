@@ -106,7 +106,8 @@ class EFTFitter {
   void makeFinalCovMat(std::vector<std::string> &&names = {});
 
   /// draw the covariance matrices (if no keys provided, draw all available in the map)
-  void drawCovMat(const std::string &dirName = "./", const std::vector<std::string> &v_keyMat = {}) const;
+  /// last flag is when one wants to draw correlation rather than covariance matrix
+  void drawCovMat(const std::string &dirName = "./", const std::vector<std::string> &v_keyMat = {}, bool do_correlation = false) const;
 
   /// get data rate according to the inputs and covMat
   std::array<double, 2> getDataRate() const;

@@ -651,7 +651,7 @@ void EFTFitter::makeFinalCovMat(std::vector<std::string> &&names)
 
 
 
-void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::string> &v_keyMat) const
+void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::string> &v_keyMat, bool do_correlation) const
 {
   // quick checks to ensure we don't make unnecessary files
   if (m_covMat.empty()) {
@@ -686,9 +686,11 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
 
     for (int iR = 0; iR < nBin; ++iR) {
       for (int iC = 0; iC < nBin; ++iC) {
-        h_cMat->SetBinContent(iR + 1, iC + 1, p_covMat.second(iR, iC));
+        const auto value = (do_correlation) ? p_covMat.second(iR, iC) / std::sqrt(p_covMat.second(iR, iR) * p_covMat.second(iC, iC)) : p_covMat.second(iR, iC);
 
-        t_cMat << std::setprecision(7) << p_covMat.second(iR, iC);
+        h_cMat->SetBinContent(iR + 1, iC + 1, value);
+
+        t_cMat << std::setprecision(7) << value;
         if (iC != nBin - 1)
           t_cMat << "    ";
       }
