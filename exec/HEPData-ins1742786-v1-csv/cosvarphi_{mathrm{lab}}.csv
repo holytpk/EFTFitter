@@ -1,0 +1,16 @@
+#: table_doi: 10.17182/hepdata.90640.v1/t21
+#: name: $\cos\varphi_{\mathrm{lab}}$
+#: description: Figure 6, normalized differential cross section for $\cos\varphi_{\mathrm{lab}}$
+#: data_file: normdiffxsec_ll_cLab.yaml
+#: keyword cmenergies: 13000.0
+#: keyword reactions: P P --> TOP TOPBAR X
+#: RE,,,P P --> TOP TOPBAR X
+#: SQRT(S) [GEV],,,13000
+$\cos\varphi_{\mathrm{lab}}$,$\cos\varphi_{\mathrm{lab}}$ LOW,$\cos\varphi_{\mathrm{lab}}$ HIGH,$\frac{1}{\sigma} \frac{{d}\sigma}{{d}\cos\varphi_{\mathrm{lab}}}$,stat +,stat -,sys +,sys -
+-0.8333335,-1.0,-0.666667,0.455511,0.002992,-0.002992,0.006541,-0.006541
+-0.5,-0.666667,-0.333333,0.398598,0.002812,-0.002812,0.005078,-0.005078
+-0.1666665,-0.333333,0.0,0.395271,0.002921,-0.002921,0.004129,-0.004129
+0.1666665,0.0,0.333333,0.426439,0.003093,-0.003093,0.00406,-0.00406
+0.5,0.333333,0.666667,0.506967,0.00362,-0.00362,0.00372,-0.00372
+0.8333335,0.666667,1.0,0.817213,0.006893,-0.006893,0.018617,-0.018617
+

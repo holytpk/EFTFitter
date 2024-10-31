@@ -1,0 +1,16 @@
+#: table_doi: 10.17182/hepdata.90640.v1/t19
+#: name: $c_{1}^{n}c_{2}^{k}-c_{1}^{k}c_{2}^{n}$
+#: description: Figure 7, normalized differential cross section for $\cos\theta_{1}^{n}\cos\theta_{2}^{k}-\cos\theta_{1}^{k}\cos\theta_{2}^{n}$
+#: data_file: normdiffxsec_c_Mnk.yaml
+#: keyword cmenergies: 13000.0
+#: keyword reactions: P P --> TOP TOPBAR X
+#: RE,,,P P --> TOP TOPBAR X
+#: SQRT(S) [GEV],,,13000
+$\cos\theta_{1}^{n}\cos\theta_{2}^{k}-\cos\theta_{1}^{k}\cos\theta_{2}^{n}$,$\cos\theta_{1}^{n}\cos\theta_{2}^{k}-\cos\theta_{1}^{k}\cos\theta_{2}^{n}$ LOW,$\cos\theta_{1}^{n}\cos\theta_{2}^{k}-\cos\theta_{1}^{k}\cos\theta_{2}^{n}$ HIGH,$\frac{1}{\sigma} \frac{{d}\sigma}{{d}\cos\theta_{1}^{n}\cos\theta_{2}^{k}-\cos\theta_{1}^{k}\cos\theta_{2}^{n}}$,stat +,stat -,sys +,sys -
+-0.8333335,-1.0,-0.666667,0.28244,0.006535,-0.006535,0.007872,-0.007872
+-0.5,-0.666667,-0.333333,0.532576,0.008771,-0.008771,0.010075,-0.010075
+-0.1666665,-0.333333,0.0,0.698456,0.009385,-0.009385,0.012501,-0.012501
+0.1666665,0.0,0.333333,0.691863,0.009365,-0.009365,0.01405,-0.01405
+0.5,0.333333,0.666667,0.5184,0.008761,-0.008761,0.007381,-0.007381
+0.8333335,0.666667,1.0,0.276264,0.006483,-0.006483,0.007993,-0.007993
+

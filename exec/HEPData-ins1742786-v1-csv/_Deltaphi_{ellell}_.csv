@@ -1,0 +1,16 @@
+#: table_doi: 10.17182/hepdata.90640.v1/t22
+#: name: $|\Delta\phi_{\ell\ell}|$
+#: description: Figure 6, normalized differential cross section for $|\Delta\phi_{\ell\ell}|$
+#: data_file: normdiffxsec_llbar_delta_phi.yaml
+#: keyword cmenergies: 13000.0
+#: keyword reactions: P P --> TOP TOPBAR X
+#: RE,,,P P --> TOP TOPBAR X
+#: SQRT(S) [GEV],,,13000
+$|\Delta\phi_{\ell\ell}|$,$|\Delta\phi_{\ell\ell}|$ LOW,$|\Delta\phi_{\ell\ell}|$ HIGH,$\frac{1}{\sigma} \frac{{d}\sigma}{{d}|\Delta\phi_{\ell\ell}|}$,stat +,stat -,sys +,sys -
+0.2617995,0.0,0.523599,0.273356,0.002625,-0.002625,0.004101,-0.004101
+0.7853985000000001,0.523599,1.047198,0.281979,0.002328,-0.002328,0.003372,-0.003372
+1.3089970000000002,1.047198,1.570796,0.300937,0.00215,-0.00215,0.002307,-0.002307
+1.8325955,1.570796,2.094395,0.324187,0.002111,-0.002111,0.00223,-0.00223
+2.3561945,2.094395,2.617994,0.349891,0.002065,-0.002065,0.002923,-0.002923
+2.8797935,2.617994,3.141593,0.37951,0.002111,-0.002111,0.003906,-0.003906
+

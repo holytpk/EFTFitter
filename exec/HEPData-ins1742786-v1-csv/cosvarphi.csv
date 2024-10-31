@@ -1,0 +1,16 @@
+#: table_doi: 10.17182/hepdata.90640.v1/t20
+#: name: $\cos\varphi$
+#: description: Figure 6, normalized differential cross section for $\cos\varphi$
+#: data_file: normdiffxsec_ll_cHel.yaml
+#: keyword cmenergies: 13000.0
+#: keyword reactions: P P --> TOP TOPBAR X
+#: RE,,,P P --> TOP TOPBAR X
+#: SQRT(S) [GEV],,,13000
+$\cos\varphi$,$\cos\varphi$ LOW,$\cos\varphi$ HIGH,$\frac{1}{\sigma} \frac{{d}\sigma}{{d}\cos\varphi}$,stat +,stat -,sys +,sys -
+-0.8333335,-1.0,-0.666667,0.404609,0.00498,-0.00498,0.003833,-0.003833
+-0.5,-0.666667,-0.333333,0.440965,0.007097,-0.007097,0.005217,-0.005217
+-0.1666665,-0.333333,0.0,0.471002,0.008387,-0.008387,0.009276,-0.009276
+0.1666665,0.0,0.333333,0.518532,0.008226,-0.008226,0.008337,-0.008337
+0.5,0.333333,0.666667,0.570951,0.010137,-0.010137,0.012505,-0.012505
+0.8333335,0.666667,1.0,0.59394,0.008626,-0.008626,0.012512,-0.012512
+

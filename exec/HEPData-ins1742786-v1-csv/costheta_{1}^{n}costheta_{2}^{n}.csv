@@ -1,0 +1,16 @@
+#: table_doi: 10.17182/hepdata.90640.v1/t13
+#: name: $\cos\theta_{1}^{n}\cos\theta_{2}^{n}$
+#: description: Figure 6, normalized differential cross section for $\cos\theta_{1}^{n}\cos\theta_{2}^{n}$
+#: data_file: normdiffxsec_c_nn.yaml
+#: keyword cmenergies: 13000.0
+#: keyword reactions: P P --> TOP TOPBAR X
+#: RE,,,P P --> TOP TOPBAR X
+#: SQRT(S) [GEV],,,13000
+$\cos\theta_{1}^{n}\cos\theta_{2}^{n}$,$\cos\theta_{1}^{n}\cos\theta_{2}^{n}$ LOW,$\cos\theta_{1}^{n}\cos\theta_{2}^{n}$ HIGH,$\frac{1}{\sigma} \frac{{d}\sigma}{{d}\cos\theta_{1}^{n}\cos\theta_{2}^{n}}$,stat +,stat -,sys +,sys -
+-0.8333335,-1.0,-0.666667,0.118818,0.002456,-0.002456,0.004588,-0.004588
+-0.5,-0.666667,-0.333333,0.414739,0.004555,-0.004555,0.007467,-0.007467
+-0.1666665,-0.333333,0.0,1.093067,0.007959,-0.007959,0.009602,-0.009602
+0.1666665,0.0,0.333333,0.999621,0.007775,-0.007775,0.012695,-0.012695
+0.5,0.333333,0.666667,0.303116,0.004583,-0.004583,0.005391,-0.005391
+0.8333335,0.666667,1.0,0.070639,0.002314,-0.002314,0.002836,-0.002836
+

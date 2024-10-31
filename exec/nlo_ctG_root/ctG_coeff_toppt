@@ -1,0 +1,30 @@
+
+Processing printSpinCoeff.cc++("/nfs/dust/cms/user/afiqaize/cms/rand/eftRivet_290118/EFTFitter/nlo_ctG_root", {"nlo_ctG_p0_nominal_toppt_default_shape.root", "nlo_ctG_p0_nominal_toppt_reweight_shape.root"})...
+Info in <TUnixSystem::ACLiC>: creating shared library /nfs/dust/cms/user/afiqaize/cms/rand/eftRivet_290118/EFTFitter/exec/./printSpinCoeff_cc.so
+Base input directory is /nfs/dust/cms/user/afiqaize/cms/rand/eftRivet_290118/EFTFitter/nlo_ctG_root
+Files whose spin coeffs to be compared are:
+nlo_ctG_p0_nominal_toppt_default_shape.root
+nlo_ctG_p0_nominal_toppt_reweight_shape.root
+
+b1k         & -0.00496888   $\pm$ 0.00163625    & -0.0050191    $\pm$ 0.00163436    &  \\ 
+b2k         & -0.00201457   $\pm$ 0.00163384    & -0.0019307    $\pm$ 0.00163185    &  \\ 
+b1r         & 0.00166048    $\pm$ 0.00163084    & 0.00166632    $\pm$ 0.00162891    &  \\ 
+b2r         & -0.00238667   $\pm$ 0.00163414    & -0.00258816   $\pm$ 0.00163238    &  \\ 
+b1n         & -0.00277043   $\pm$ 0.00163446    & -0.00271189   $\pm$ 0.00163248    &  \\ 
+b2n         & -0.00229189   $\pm$ 0.00163406    & -0.00240985   $\pm$ 0.00163224    &  \\ 
+b1j         & -0.002044     $\pm$ 0.00163386    & -0.00214057   $\pm$ 0.00163202    &  \\ 
+b2j         & -0.000683068  $\pm$ 0.00163275    & -0.000762699  $\pm$ 0.00163089    &  \\ 
+b1q         & -0.00149773   $\pm$ 0.00163342    & -0.00141222   $\pm$ 0.00163142    &  \\ 
+b2q         & -0.000867733  $\pm$ 0.0016329     & -0.000881558  $\pm$ 0.00163099    &  \\ 
+ckk         & 0.346685      $\pm$ 0.00354732    & 0.361994      $\pm$ 0.00355562    &  \\ 
+crr         & 0.0282308     $\pm$ 0.00328743    & 0.0438106     $\pm$ 0.00329626    &  \\ 
+cnn         & 0.314712      $\pm$ 0.00352122    & 0.319117      $\pm$ 0.00352067    &  \\ 
+cP_rk       & -0.206355     $\pm$ 0.00398794    & -0.202318     $\pm$ 0.00398654    &  \\ 
+cM_rk       & -0.000406714  $\pm$ 0.00415602    & -0.000215573  $\pm$ 0.00415128    &  \\ 
+cP_nr       & 0.00656424    $\pm$ 0.00416171    & 0.00663504    $\pm$ 0.00415686    &  \\ 
+cM_nr       & -0.000769348  $\pm$ 0.00415572    & -0.00095153   $\pm$ 0.00415068    &  \\ 
+cP_nk       & -0.0014131    $\pm$ 0.0041552     & -0.00143928   $\pm$ 0.00415028    &  \\ 
+cM_nk       & 0.00106348    $\pm$ 0.00415722    & 0.0012847     $\pm$ 0.0041525     &  \\ 
+cHel        & -0.232522     $\pm$ 0.00144243    & -0.244271     $\pm$ 0.00143116    &  \\ 
+cLab        & 0.157764      $\pm$ 0.000687346   & 0.165928      $\pm$ 0.000679882   &  \\ 
+LL_dPhi     & 0.12512       $\pm$ 0.000713987   & 0.111654      $\pm$ 0.000724123   &  \\ 

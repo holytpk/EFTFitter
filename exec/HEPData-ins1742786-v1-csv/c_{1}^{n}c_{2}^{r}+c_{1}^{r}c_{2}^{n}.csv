@@ -1,0 +1,16 @@
+#: table_doi: 10.17182/hepdata.90640.v1/t16
+#: name: $c_{1}^{n}c_{2}^{r}+c_{1}^{r}c_{2}^{n}$
+#: description: Figure 7, normalized differential cross section for $\cos\theta_{1}^{n}\cos\theta_{2}^{r}+\cos\theta_{1}^{r}\cos\theta_{2}^{n}$
+#: data_file: normdiffxsec_c_Pnr.yaml
+#: keyword cmenergies: 13000.0
+#: keyword reactions: P P --> TOP TOPBAR X
+#: RE,,,P P --> TOP TOPBAR X
+#: SQRT(S) [GEV],,,13000
+$\cos\theta_{1}^{n}\cos\theta_{2}^{r}+\cos\theta_{1}^{r}\cos\theta_{2}^{n}$,$\cos\theta_{1}^{n}\cos\theta_{2}^{r}+\cos\theta_{1}^{r}\cos\theta_{2}^{n}$ LOW,$\cos\theta_{1}^{n}\cos\theta_{2}^{r}+\cos\theta_{1}^{r}\cos\theta_{2}^{n}$ HIGH,$\frac{1}{\sigma} \frac{{d}\sigma}{{d}\cos\theta_{1}^{n}\cos\theta_{2}^{r}+\cos\theta_{1}^{r}\cos\theta_{2}^{n}}$,stat +,stat -,sys +,sys -
+-0.8333335,-1.0,-0.666667,0.271305,0.006464,-0.006464,0.010383,-0.010383
+-0.5,-0.666667,-0.333333,0.517576,0.010817,-0.010817,0.013684,-0.013684
+-0.1666665,-0.333333,0.0,0.711208,0.012025,-0.012025,0.015867,-0.015867
+0.1666665,0.0,0.333333,0.705008,0.011888,-0.011888,0.022093,-0.022093
+0.5,0.333333,0.666667,0.528293,0.010837,-0.010837,0.010461,-0.010461
+0.8333335,0.666667,1.0,0.266611,0.006492,-0.006492,0.011733,-0.011733
+
