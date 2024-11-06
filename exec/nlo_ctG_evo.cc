@@ -45,12 +45,12 @@ int main(/*int argc, char** argv*/) {
   const std::string dName = "TTbarSpinDensityMatrix/";
   const std::string /*hName = "LL_dPhi",*/ sName = dName + "sumWgt_noCut";
   const std::string inDir = "./nlo_ctG_root/";
-  const std::string sufDat = "_shape_data_a", sufSim = "_absolute_part_cut_0"; 
+  const std::string sufDat = "_shape_data_a", sufSim = "_absolute_part_cut_0";
   const double k_nnlo_nlo = 1.220251456; // see notes at bottom
   const std::string outDir = "./nlo_ctG_0115/nominal_toppt_default/shape_data/evolution/";
 
   // make the range to interpolate over; in this case [min, max: step]
-  const std::vector<double> v_opPoint = makeInterval(-20., 20., 0.1);
+  const std::vector<double> v_opPoint = makeInterval(-10., 10., 0.01);
   std::vector<EFT::Sample> v_sample; 
   if (useAll)
     v_sample.push_back(EFT::Sample::all);
@@ -61,13 +61,13 @@ int main(/*int argc, char** argv*/) {
   const std::vector<std::string> v_hStr = {"b1k", "b2k", "b1r", "b2r", "b1n", "b2n", "b1j", "b2j", "b1q", "b2q",
                                            "ckk", "crr", "cnn", 
                                            "cP_rk", "cM_rk", "cP_nr", "cM_nr", "cP_nk", "cM_nk",
-                                           "cHel"/*,
-                                           "cLab", "LL_dPhi"*/};
+                                           "cHel",
+                                           "cLab", "LL_dPhi"}; 
 
   const std::vector<std::array<int, 2>> v_snake = {{1, 6}, {7, 12}, {13, 18}, {19, 24}, {25, 30}, {31, 36}, {37, 42}, 
                                              {43, 48}, {49, 54}, {55, 60}, {61, 66}, {67, 72}, {73, 78}, {79, 84}, 
                                              {85, 90}, {91, 96}, {97, 102}, {103, 108}, {109, 114}, 
-                                             {115, 120}/*, {121, 126}, {127, 132}*/};
+                                             {115, 120}, {121, 126}, {127, 132}};
 
   // save the rates in case they're used
   //const std::array<double, 2> rate_17_001 = {803., 33.}, rate_18_006 = {836.925, 51.685};
@@ -83,42 +83,27 @@ int main(/*int argc, char** argv*/) {
 
   // variable index
   auto evoFile = std::make_unique<TFile>((outDir + "ctG_evolution.root").c_str(), "recreate");
-  std::vector<int> v_all_var = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19/*, 20, 21*/};
+  std::vector<int> v_all_var = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21};
   std::vector<int> v_fit_var;
 
   for (int iVar = 0; iVar < v_hStr.size(); ++iVar) {
     std::cout << "EFTFitter: iteration " << iVar << " starting..." << std::endl;
     std::vector<std::array<std::unique_ptr<TGraphAsymmErrors>, 2>> v_current_result;
-
+      
     for (int iFit = 0; iFit < v_hStr.size(); ++iFit) {
 
-      if (iFit >= 0 && iFit < v_hStr.size()) {
-          std::cout << "Accessing v_hStr at iFit " << iFit << ": " << v_hStr.at(iFit) << std::endl;
-      } else {
-          std::cerr << "Error: iFit out of bounds. iFit: " << iFit << ", size of v_hStr: " << v_hStr.size() << std::endl;
-          continue; // Skip out-of-bounds index
+      if ( std::count(std::begin(v_fit_var), std::end(v_fit_var), iFit) ) {
+        v_current_result.emplace_back(fitResult("", ""));
+        continue;
       }
-        
-      std::cout << "Attempting fit for variable: " << v_hStr.at(iFit) << " (Index " << iFit << ")" << std::endl;
-      if (std::count(std::begin(v_fit_var), std::end(v_fit_var), iFit)) {
-          v_current_result.emplace_back(fitResult("", ""));
-          continue;
-      }
-      
+
       std::vector<int> v_iEB(v_fit_var);
-      v_iEB.push_back(iFit);
+      v_iEB.push_back( iFit );
       std::sort(std::begin(v_iEB), std::end(v_iEB));
-  
-      std::cout << "Processing fit on variable: " << v_hStr.at(iFit) << " with v_iEB size: " << v_iEB.size() << std::endl;
 
       std::vector<std::array<int, 2>> v_endbin;
-      for (int iEB = 0; iEB < v_iEB.size(); ++iEB) {
-          if (iEB >= 0 && iEB < v_iEB.size()) {
-              v_endbin.push_back({((v_iEB.at(iEB) + 1) * 5) - 4, ((v_iEB.at(iEB) + 1) * 5)}); // hybrid shape 
-          } else {
-              std::cerr << "Index out of bounds in v_iEB: " << iEB << " for size " << v_iEB.size() << std::endl;
-          }
-      }
+      for (int iEB = 0; iEB < v_iEB.size(); ++iEB)
+        v_endbin.push_back( {((v_iEB.at(iEB) + 1) * 5) - 4, ((v_iEB.at(iEB) + 1) * 5)} ); // hybrid shape          
 
       std::cout << "EFTFitter: starting fit on variable " << v_hStr.at(iFit) << " in iteration " << iVar << std::endl;
 
@@ -207,28 +192,15 @@ int main(/*int argc, char** argv*/) {
       eft.listKeyToFit({ {"ctG", v_opPoint} });
       eft.computeFitChi2(v_sample);
 
-      eft.draw1DChi2({ {"ctG", { "ctG", {/* op range in min, max */}, {0., 9.999}, {-4.999, 9.999} }} }, outDir, v_sample);
+      eft.draw1DChi2({ {"ctG", { "ctG", {/* op range in min, max */}, {0., 9.999}, {-9.999, 9.999} }} }, outDir, v_sample);
 
       eft.clearContent();
 
       v_current_result.emplace_back(fitResult("ctG", outDir + "ctG_dChi2.root", iVar, iFit, useAll));
-      if (!v_current_result.empty()) {
-        int last_index = v_current_result.size() - 1;
-        if (last_index >= 0 && last_index < v_current_result.size()) {
-            // Safely access v_current_result
-            if (v_current_result.at(last_index).at(0) == nullptr) {
-                std::cout << "EFTFitter: fit on variable " << v_hStr.at(iFit)
-                          << " in iteration " << iVar << " doesn't result in a constraint!" << std::endl;
-            }
-        } else {
-            std::cerr << "Warning: Attempting out-of-bounds access on v_current_result with last_index: " << last_index << std::endl;
-        }
-      }
-        
-      // if (v_current_result.back().at(0) == nullptr)
-      //   std::cout << "EFTFitter: fit on variable " << v_hStr.at(iFit) << " in iteration " << iVar << " doesn't result in a constraint!" << std::endl;
-      // else 
-      //   std::cout << "EFTFitter: fit on variable " << v_hStr.at(iFit) << " in iteration " << iVar << " saved for evolution scan..." << std::endl;
+      if (v_current_result.back().at(0) == nullptr)
+        std::cout << "EFTFitter: fit on variable " << v_hStr.at(iFit) << " in iteration " << iVar << " doesn't result in a constraint!" << std::endl;
+      else 
+        std::cout << "EFTFitter: fit on variable " << v_hStr.at(iFit) << " in iteration " << iVar << " saved for evolution scan..." << std::endl;
 
       gSystem->Exec( ("rm " + outDir + "ctG_dChi2.root").c_str() );
     }

@@ -1140,7 +1140,7 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
     }
   }
 
-  //printAll(m_fitChi2);
+  printAll(m_fitChi2);
 }
 
 
