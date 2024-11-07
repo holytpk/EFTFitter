@@ -50,7 +50,7 @@ int main(/*int argc, char** argv*/) {
   const std::string outDir = "./nlo_ctG_0115/nominal_toppt_default/shape_data/evolution/";
 
   // make the range to interpolate over; in this case [min, max: step]
-  const std::vector<double> v_opPoint = makeInterval(-10., 10., 0.01);
+  const std::vector<double> v_opPoint = makeInterval(-5., 5., 0.1);
   std::vector<EFT::Sample> v_sample; 
   if (useAll)
     v_sample.push_back(EFT::Sample::all);
@@ -192,7 +192,7 @@ int main(/*int argc, char** argv*/) {
       eft.listKeyToFit({ {"ctG", v_opPoint} });
       eft.computeFitChi2(v_sample);
 
-      eft.draw1DChi2({ {"ctG", { "ctG", {/* op range in min, max */}, {0., 9.999}, {-9.999, 9.999} }} }, outDir, v_sample);
+      eft.draw1DChi2({ {"ctG", { "ctG", {/* op range in min, max */}, {-5.000, 5.000}, {-5.000, 5.000} }} }, outDir, v_sample);
 
       eft.clearContent();
 
