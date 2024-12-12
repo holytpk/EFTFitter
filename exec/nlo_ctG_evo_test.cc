@@ -3,7 +3,6 @@
 // utility tool execMacro.sh compiles and executes the macro, to use it do: ./exec/execMacro.sh exec/this_file.cc
 
 // a sane version of evolution plot that does not require too much manual work
-// created by Afiq Anuar and modified by Lingqiang He 
 
 #include <filesystem>
 
@@ -44,13 +43,13 @@ int main(/*int argc, char** argv*/) {
   EFT eft("data", 1., EFT::Fit::hybrid, EFT::Stat::xsec, 1.);
   const std::string dName = "TTbarSpinDensityMatrix/";
   const std::string /*hName = "LL_dPhi",*/ sName = dName + "sumWgt_noCut";
-  const std::string inDir = "nlo_ctG_root_density/";
-  const std::string sufDat = "_shape_data_a", sufSim = "_absolute_part_cut_0;1";
+  const std::string inDir = "./nlo_ctG_root_density/";
+  const std::string sufDat = "_shape_data_a", sufSim = "_absolute_part_cut_0";
   const double k_nnlo_nlo = 1.220251456; // see notes at bottom
   const std::string outDir = "./nlo_ctG_0115/nominal_toppt_default/shape_data/evolution/";
 
   // make the range to interpolate over; in this case [min, max: step]
-  const std::vector<double> v_opPoint = makeInterval(-20., 20., 0.0001);
+  const std::vector<double> v_opPoint = makeInterval(-5., 5., 0.0001);
   std::vector<EFT::Sample> v_sample; 
   if (useAll)
     v_sample.push_back(EFT::Sample::all);
@@ -61,37 +60,28 @@ int main(/*int argc, char** argv*/) {
   const std::vector<std::string> v_hStr = {"b1k", "b2k", "b1r", "b2r", "b1n", "b2n", "b1j", "b2j", "b1q", "b2q",
                                            "ckk", "crr", "cnn", 
                                            "cP_rk", "cM_rk", "cP_nr", "cM_nr", "cP_nk", "cM_nk",
-                                           "cHel",
-                                           "cLab", "LL_dPhi"}; 
+                                           "cHel"/*,
+                                           "cLab", "LL_dPhi"*/};
 
   const std::vector<std::array<int, 2>> v_snake = {{1, 6}, {7, 12}, {13, 18}, {19, 24}, {25, 30}, {31, 36}, {37, 42}, 
                                              {43, 48}, {49, 54}, {55, 60}, {61, 66}, {67, 72}, {73, 78}, {79, 84}, 
                                              {85, 90}, {91, 96}, {97, 102}, {103, 108}, {109, 114}, 
-                                             {115, 120}, {121, 126}, {127, 132}};
+                                             {115, 120}/*, {121, 126}, {127, 132}*/};
 
   // save the rates in case they're used
   //const std::array<double, 2> rate_17_001 = {803., 33.}, rate_18_006 = {836.925, 51.685};
   const std::array<double, 2> rate_data = {0., 0.}, rate_zero = {0., 0.};
 
-  // if the output directory doesn't exist, create it 
-  if (!std::filesystem::exists(outDir)) {
-      std::filesystem::create_directories(outDir);
-      std::cout << "Directory created: " << outDir << std::endl;
-  } else {
-      std::cout << "Directory already exists: " << outDir << std::endl;
-  }
-
   // variable index
   auto evoFile = std::make_unique<TFile>((outDir + "ctG_evolution.root").c_str(), "recreate");
-  std::vector<int> v_all_var = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21};
+  std::vector<int> v_all_var = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19/*, 20, 21*/};
   std::vector<int> v_fit_var;
 
   for (int iVar = 0; iVar < v_hStr.size(); ++iVar) {
     std::cout << "EFTFitter: iteration " << iVar << " starting..." << std::endl;
     std::vector<std::array<std::unique_ptr<TGraphAsymmErrors>, 2>> v_current_result;
-      
-    for (int iFit = 0; iFit < v_hStr.size(); ++iFit) {
 
+    for (int iFit = 0; iFit < v_hStr.size(); ++iFit) {
       if ( std::count(std::begin(v_fit_var), std::end(v_fit_var), iFit) ) {
         v_current_result.emplace_back(fitResult("", ""));
         continue;
@@ -103,7 +93,7 @@ int main(/*int argc, char** argv*/) {
 
       std::vector<std::array<int, 2>> v_endbin;
       for (int iEB = 0; iEB < v_iEB.size(); ++iEB)
-        v_endbin.push_back( {((v_iEB.at(iEB) + 1) * 5) - 4, ((v_iEB.at(iEB) + 1) * 5)} ); // hybrid shape          
+        v_endbin.push_back( {((v_iEB.at(iEB) + 1) * 5) - 4, ((v_iEB.at(iEB) + 1) * 5)} ); // hybrid shape
 
       std::cout << "EFTFitter: starting fit on variable " << v_hStr.at(iFit) << " in iteration " << iVar << std::endl;
 
@@ -187,12 +177,12 @@ int main(/*int argc, char** argv*/) {
 
       // grab the stat correlation matrix given by Jacob
       const std::vector<std::array<int, 2>> covMat_binRange = v_endbin;
-      eft.readCovMatRoot("finalcov", "covariance_matrix/statistical_covariance_matrix.root", "covariance_matrix", covMat_binRange);
+      eft.readCovMatRoot("finalcov", "./covariance_matrix/statistical_covariance_matrix.root", "covariance_matrix", covMat_binRange);
 
       eft.listKeyToFit({ {"ctG", v_opPoint} });
       eft.computeFitChi2(v_sample);
 
-      eft.draw1DChi2({ {"ctG", { "ctG", {/* op range in min, max */}, {-20.000, 20.000}, {-20.000, 20.000} }} }, outDir, v_sample);
+      eft.draw1DChi2({ {"ctG", { "ctG", {/* op range in min, max */}, {0., 9.999}, {-4.999, 9.999} }} }, outDir, v_sample);
 
       eft.clearContent();
 

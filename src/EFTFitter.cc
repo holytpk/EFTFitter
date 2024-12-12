@@ -1035,113 +1035,106 @@ void EFTFitter::listKeyToFit(const std::map<std::string, std::vector<double>> &m
 
 void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgnore)
 {
-  const bool rateFit = (fitMode == Fit::hybrid and v_rawBin.empty());
+    const bool rateFit = (fitMode == Fit::hybrid and v_rawBin.empty());
 
-  if (!hasData or v_keyToFit.empty() or (!m_covMat.count("finalcov") and !rateFit))
-    throw std::range_error( "This method shouldn't be called given the insuffiencient input! "
-                            "Ensure contents (inserted with addRawInput() or interpolatable with prepareInterpolationBase()), "
-                            "list of keys to be fitted on (made with listKeyToFit()) "
-                            "and final covmat (made with the auto/readCovMat methods and finally makeFinalCovMat()) are available!" );
+    if (!hasData or v_keyToFit.empty() or (!m_covMat.count("finalcov") and !rateFit))
+        throw std::range_error("This method shouldn't be called given the insufficient input!");
 
-  std::cout << "Computing the chi2 for all requested keys..." << std::endl << std::endl;
+    std::cout << "Computing the chi2 for all requested keys..." << std::endl << std::endl;
 
-  const std::vector<std::array<double, 2>> &dataContent = m_binContent.at({dataName, Sample::all});
-  const int nBin = dataContent.size(), iXs = (statMode == Stat::xsec) ? 0 : 1;
-  const double dataInt = getContentSum(dataContent);
+    const std::vector<std::array<double, 2>> &dataContent = m_binContent.at({dataName, Sample::all});
+    const int nBin = dataContent.size(), iXs = (statMode == Stat::xsec) ? 0 : 1;
+    const double dataInt = getContentSum(dataContent);
 
-  // ok here we copy and invert the matrix because this is what we actually use
-  // a bit of shenanigan needed in case of shape fit since we need to ignore one bin for convertible matrix
-  // on the other hand interpolation needs to see the full template, so it must not be done any earlier
-  // bin index to ignore means every nth bin in case of stitched templates (assumed to have same nBinEach)
-  // number of stitched templates obtained assuming shapes sum up to 1
-  const int nBinEach = (nBin - 2) / int(shapeSum);
-  const int nHist = (nBin - 2) / nBinEach;
-  //std::cout << "ignore " << binToIgnore << " nBin " << nBin << " nBinEach " << nBinEach << " nHist " << nHist << std::endl;
+    const int nBinEach = (nBin - 2) / int(shapeSum);
+    const int nHist = (nBin - 2) / nBinEach;
 
-  // reset the bin index in case requested argument doesn't make sense
-  // probably fine to do so silently, it's only used to verify the bin dropper works correctly
-  if (binToIgnore >= nBinEach or binToIgnore < 0)
-    binToIgnore = 1;
-
-  TMatrixD invMat;
-  // do nothing for rate fits - no matrix needed as there's no template
-  if (rateFit)
-    ;
-  else if (fitMode != Fit::shape) {
-    // must resize before copy-assign: https://root.cern.ch/how/how-create-and-fill-matrix
-    invMat.ResizeTo(m_covMat.at("finalcov"));
-    invMat = m_covMat.at("finalcov");
-  }
-  else {
-    invMat.ResizeTo(nBin - 2 - nHist, nBin - 2 - nHist);
-
-    // two indices needed as these run off differently :(
-    int iShpR = 0, iShpC = 0;
-
-    for (int iAbsR = 0; iAbsR < nBin - 2; ++iAbsR) {
-      if (iAbsR % nBinEach == binToIgnore) continue;
-
-      iShpC = 0;
-      for (int iAbsC = 0; iAbsC < nBin - 2; ++iAbsC) {
-        if (iAbsC % nBinEach == binToIgnore) continue;
-
-        invMat(iShpR, iShpC) = m_covMat.at("finalcov")(iAbsR, iAbsC);
-        ++iShpC;
-      }
-
-      ++iShpR;
-    }
-  }
-
-  // std::cout << "" << TDecompLU(invMat).Condition() << std::endl; // condition number of the matrix
-  invMat.Invert();
-
-  for (const auto &key : v_keyToFit) {
-    for (const auto &samp : v_sample) {
-      const std::vector<std::array<double, 2>> opContent = interpolateOpValue(key, samp);
-      const double opInt = getContentSum(opContent);
-
-      // here they're used as offset counters; increment every time a bin is ignored
-      int iShpR = 0, iShpC = 0;
-      double fitChi2 = 0.;
-      for (int iAbsR = 2; iAbsR < nBin; ++iAbsR) {
-        if (fitMode == Fit::shape and ((iAbsR - 2) % nBinEach == binToIgnore)) {
-          ++iShpR;
-          continue;
+    std::cout << "Elements of finalcov matrix before inversion:\n";
+    for (int i = 0; i < m_covMat.at("finalcov").GetNrows(); ++i) {
+        for (int j = 0; j < m_covMat.at("finalcov").GetNcols(); ++j) {
+            std::cout << "finalcov(" << i << ", " << j << "): " << m_covMat.at("finalcov")(i, j) << std::endl;
         }
-
-        // the actual matrix index, which is strictly related to the actual row/col indices and offset
-        // but doing it like this improves readability slightly
-        int iMatR = iAbsR - 2 - iShpR;
-
-        iShpC = 0;
-        for (int iAbsC = iAbsR; iAbsC < nBin; ++iAbsC) {
-          if (fitMode == Fit::shape and ((iAbsC - 2) % nBinEach == binToIgnore)) {
-            ++iShpC;
-            continue;
-          }
-          int iMatC = iAbsC - 2 - iShpC;
-          double factor = (iMatR == iMatC) ? 1. : 2.;
-
-          // first compute the bin differences
-          const double deltaR = (dataInt * dataContent.at(iAbsR).at(0)) - (opInt * opContent.at(iAbsR).at(0));
-          const double deltaC = (dataInt * dataContent.at(iAbsC).at(0)) - (opInt * opContent.at(iAbsC).at(0));
-
-          fitChi2 += deltaR * deltaC * invMat(iMatR, iMatC) * factor;
-        }
-      }
-
-      if (fitMode == Fit::hybrid and dataContent.at(iXs).at(0) > 0.) {
-        const double deltaS = dataContent.at(iXs).at(0) - opContent.at(iXs).at(0);
-        fitChi2 += (deltaS * deltaS) / (dataContent.at(iXs).at(1) * dataContent.at(iXs).at(1));
-      }
-
-      m_fitChi2.insert({{key, samp}, fitChi2});
     }
-  }
 
-  printAll(m_fitChi2);
+    TMatrixD invMat;
+    if (!rateFit) {
+        if (fitMode != Fit::shape) {
+            invMat.ResizeTo(m_covMat.at("finalcov"));
+            invMat = m_covMat.at("finalcov");
+        } else {
+            invMat.ResizeTo(nBin - 2 - nHist, nBin - 2 - nHist);
+            int iShpR = 0, iShpC = 0;
+            for (int iAbsR = 0; iAbsR < nBin - 2; ++iAbsR) {
+                if (iAbsR % nBinEach == binToIgnore) continue;
+                iShpC = 0;
+                for (int iAbsC = 0; iAbsC < nBin - 2; ++iAbsC) {
+                    if (iAbsC % nBinEach == binToIgnore) continue;
+                    invMat(iShpR, iShpC) = m_covMat.at("finalcov")(iAbsR, iAbsC);
+                    ++iShpC;
+                }
+                ++iShpR;
+            }
+        }
+        invMat.Invert();
+    }
+
+    for (const auto &key : v_keyToFit) {
+        for (const auto &samp : v_sample) {
+            const std::vector<std::array<double, 2>> opContent = interpolateOpValue(key, samp);
+            const double opInt = getContentSum(opContent);
+
+            int iShpR = 0, iShpC = 0;
+            double fitChi2 = 0.;
+
+            for (int iAbsR = 2; iAbsR < nBin; ++iAbsR) {
+                if (fitMode == Fit::shape and ((iAbsR - 2) % nBinEach == binToIgnore)) {
+                    ++iShpR;
+                    continue;
+                }
+
+                // Print observed and expected values for debugging
+                // std::cout << "Ling Debugging: Bin " << iAbsR << ": Observed = " << dataContent.at(iAbsR).at(0) << ", Expected = " << opContent.at(iAbsR).at(0) << std::endl;
+                
+                int iMatR = iAbsR - 2 - iShpR;
+                iShpC = 0;
+
+                for (int iAbsC = iAbsR; iAbsC < nBin; ++iAbsC) {
+                    if (fitMode == Fit::shape and ((iAbsC - 2) % nBinEach == binToIgnore)) {
+                        ++iShpC;
+                        continue;
+                    }
+                    int iMatC = iAbsC - 2 - iShpC;
+                    double factor = (iMatR == iMatC) ? 1. : 2.;
+
+                    // Calculate deltaR and deltaC
+                    const double deltaR = (dataInt * dataContent.at(iAbsR).at(0)) - (opInt * opContent.at(iAbsR).at(0));
+                    const double deltaC = (dataInt * dataContent.at(iAbsC).at(0)) - (opInt * opContent.at(iAbsC).at(0));
+
+                    // Print delta values and matrix indices for debugging
+                    // std::cout << "Row: " << iAbsR << ", Col: " << iAbsC
+                    //           << " | deltaR: " << deltaR << ", deltaC: " << deltaC
+                    //           << " | invMat(" << iMatR << ", " << iMatC << "): " << invMat(iMatR, iMatC)
+                    //           << " | factor: " << factor << std::endl;
+
+                    // Update fitChi2
+                    fitChi2 += deltaR * deltaC * invMat(iMatR, iMatC) * factor;
+                }
+            }
+
+            if (fitMode == Fit::hybrid and dataContent.at(iXs).at(0) > 0.) {
+                const double deltaS = dataContent.at(iXs).at(0) - opContent.at(iXs).at(0);
+                fitChi2 += (deltaS * deltaS) / (dataContent.at(iXs).at(1) * dataContent.at(iXs).at(1));
+            }
+
+            std::cout << "Computed fitChi2 for key: " << key << ", sample: " << samp << " | Chi2: " << fitChi2 << std::endl;
+
+            m_fitChi2.insert({{key, samp}, fitChi2});
+        }
+    }
+
+    // printAll(m_fitChi2);
 }
+
 
 
 
