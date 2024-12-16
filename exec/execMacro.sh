@@ -24,13 +24,13 @@ fi
 
 ## and that it is the right version
 rooVer=$(root-config --version)
-if [ $(echo "${rooVer%%/*} < 6.00" | bc -l) -eq 1 ]; then
-    echo "Detected ROOT version < 6.00, while a newer version is required. Aborting..."
-    exit
-fi
+# if [ $(echo "${rooVer%%/*} < 6.00" | bc -l) -eq 1 ]; then
+#     echo "Detected ROOT version < 6.00, while a newer version is required. Aborting..."
+#     exit
+# fi
 
 ## ok, do stuff
-eftSrc="WHERE/THE/EFTFITTER/SRC/DIR/IS"
+eftSrc="../src"
 txtMacro=$(readlink -f ${1})
 exeMacro=${txtMacro%.*}
 
