@@ -29,6 +29,17 @@ std::array<std::unique_ptr<TGraphAsymmErrors>, 2> fitResult(const std::string &o
   a_graph.at(0) = std::unique_ptr<TG>(dynamic_cast<TG *>(( file->Get( (op + "_sigma1_" + samp).c_str() ))->Clone( (tag + "_s1").c_str() ) ));
   a_graph.at(1) = std::unique_ptr<TG>(dynamic_cast<TG *>(( file->Get( (op + "_sigma2_" + samp).c_str() ))->Clone( (tag + "_s2").c_str() ) ));
 
+  // Print out loaded graph values
+  for (size_t i = 0; i < a_graph.size(); ++i) {
+    if (a_graph.at(i) != nullptr) {
+
+      for (int j = 0; j < a_graph.at(i)->GetN(); ++j) {
+        double x, y;
+        a_graph.at(i)->GetPoint(j, x, y);
+      }
+    } 
+  }
+
   return a_graph;
 }
 
@@ -37,19 +48,19 @@ int main(/*int argc, char** argv*/) {
 
   // common flags for an evolution test
   // fit with data or SM, check evolution of all or linear part, 2 sigma or 1 sigma interval width as figure of merit 
-  const bool useData = true, useAll = false, useSig2 = true;
+  const bool useData = true, useAll = true, useSig2 = true;
 
   // construction done with the key we want to treat as data, lambda, fit mode and stat mode (optionally sum of shape templates)
   EFT eft("data", 1., EFT::Fit::hybrid, EFT::Stat::xsec, 1.);
   const std::string dName = "TTbarSpinDensityMatrix/";
   const std::string /*hName = "LL_dPhi",*/ sName = dName + "sumWgt_noCut";
-  const std::string inDir = "./nlo_ctG_root_density/";
+  const std::string inDir = "./nlo_ctG_root/";
   const std::string sufDat = "_shape_data_a", sufSim = "_absolute_part_cut_0";
   const double k_nnlo_nlo = 1.220251456; // see notes at bottom
   const std::string outDir = "./nlo_ctG_0115/nominal_toppt_default/shape_data/evolution/";
 
   // make the range to interpolate over; in this case [min, max: step]
-  const std::vector<double> v_opPoint = makeInterval(-5., 5., 0.0001);
+  const std::vector<double> v_opPoint = makeInterval(-1., 1., 0.0001);
   std::vector<EFT::Sample> v_sample; 
   if (useAll)
     v_sample.push_back(EFT::Sample::all);
@@ -57,24 +68,30 @@ int main(/*int argc, char** argv*/) {
     v_sample.push_back(EFT::Sample::linear);
   const std::string sample = (useAll) ? "all" : "linear";
 
+  // const std::vector<std::string> v_hStr = {"b1k"}; 
+
   const std::vector<std::string> v_hStr = {"b1k", "b2k", "b1r", "b2r", "b1n", "b2n", "b1j", "b2j", "b1q", "b2q",
                                            "ckk", "crr", "cnn", 
                                            "cP_rk", "cM_rk", "cP_nr", "cM_nr", "cP_nk", "cM_nk",
                                            "cHel"/*,
-                                           "cLab", "LL_dPhi"*/};
+                                           "cLab", "LL_dPhi"*/}; // test comment 
+
+  // const std::vector<std::array<int, 2>> v_snake = {{1, 6}};
 
   const std::vector<std::array<int, 2>> v_snake = {{1, 6}, {7, 12}, {13, 18}, {19, 24}, {25, 30}, {31, 36}, {37, 42}, 
                                              {43, 48}, {49, 54}, {55, 60}, {61, 66}, {67, 72}, {73, 78}, {79, 84}, 
                                              {85, 90}, {91, 96}, {97, 102}, {103, 108}, {109, 114}, 
-                                             {115, 120}/*, {121, 126}, {127, 132}*/};
+                                             {115, 120}/*, {121, 126}, {127, 132}*/}; // test comment 
 
   // save the rates in case they're used
-  //const std::array<double, 2> rate_17_001 = {803., 33.}, rate_18_006 = {836.925, 51.685};
+  // const std::array<double, 2> rate_17_001 = {803., 33.}, rate_18_006 = {836.925, 51.685};
   const std::array<double, 2> rate_data = {0., 0.}, rate_zero = {0., 0.};
 
   // variable index
   auto evoFile = std::make_unique<TFile>((outDir + "ctG_evolution.root").c_str(), "recreate");
-  std::vector<int> v_all_var = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19/*, 20, 21*/};
+
+  //std::vector<int> v_all_var = {19};
+  std::vector<int> v_all_var = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19/*, 20, 21*/}; // test comment 
   std::vector<int> v_fit_var;
 
   for (int iVar = 0; iVar < v_hStr.size(); ++iVar) {
@@ -84,6 +101,7 @@ int main(/*int argc, char** argv*/) {
     for (int iFit = 0; iFit < v_hStr.size(); ++iFit) {
       if ( std::count(std::begin(v_fit_var), std::end(v_fit_var), iFit) ) {
         v_current_result.emplace_back(fitResult("", ""));
+        //std::cout << "Ling: v_current_result emplaced with null" << std::endl; 
         continue;
       }
 
@@ -94,6 +112,7 @@ int main(/*int argc, char** argv*/) {
       std::vector<std::array<int, 2>> v_endbin;
       for (int iEB = 0; iEB < v_iEB.size(); ++iEB)
         v_endbin.push_back( {((v_iEB.at(iEB) + 1) * 5) - 4, ((v_iEB.at(iEB) + 1) * 5)} ); // hybrid shape
+        //v_endbin.push_back( {((v_iEB.at(iEB) + 1) * 6) - 5, ((v_iEB.at(iEB) + 1) * 6)} );
 
       std::cout << "EFTFitter: starting fit on variable " << v_hStr.at(iFit) << " in iteration " << iVar << std::endl;
 
@@ -111,7 +130,8 @@ int main(/*int argc, char** argv*/) {
         // shape fit
         // ensure binToIgnore matches the _drop_bin_N in matrix name - hybrid assumes matrix is good to go
         const int nBin = v_binC.size();
-        const int binToIgnore = 1, nBinEach = (nBin - 2) / int(shapeSum);
+        const int binToIgnore = 1, nBinEach = (nBin-2) / int(shapeSum);
+        //std::cout << "Ling: checking nBinEach: " << nBinEach <<", nBin: " << nBin << std::endl; 
 
         for (int iB = 2; iB < v_binC.size(); ++iB) {
           const int iFit = (iB - 2) / 6;
@@ -132,14 +152,14 @@ int main(/*int argc, char** argv*/) {
       // and MC following the syntax op1_val1--op2_val2-- ... --opN_valN
       // NLO (taken off James' EFT_Fitter)
       // SM
-      eft.addRawInput("ctG_0", EFT::Sample::all, inDir + "nlo_ctG_p0_nominal_toppt_default_shape_concatenated.root", 
+      eft.addRawInput("ctG_0", EFT::Sample::all, inDir + "nlo_ctG_p0_nominal_toppt_default_shape.root", 
                       dName + "snake_spinCorr" + sufSim, sName, 1, {22. * k_nnlo_nlo * 681.63, 0.}, EFT::Stat::count);
 
       // and EFT
-      eft.addRawInput("ctG_2", EFT::Sample::all, inDir + "nlo_ctG_p2_nominal_toppt_default_shape_concatenated.root", 
+      eft.addRawInput("ctG_2", EFT::Sample::all, inDir + "nlo_ctG_p2_nominal_toppt_default_shape.root", 
                       dName + "snake_spinCorr" + sufSim, sName, 1, {22. * k_nnlo_nlo * 1260.07, 0.}, EFT::Stat::count);
 
-      eft.addRawInput("ctG_-2", EFT::Sample::all, inDir + "nlo_ctG_m2_nominal_toppt_default_shape_concatenated.root", 
+      eft.addRawInput("ctG_-2", EFT::Sample::all, inDir + "nlo_ctG_m2_nominal_toppt_default_shape.root", 
                       dName + "snake_spinCorr" + sufSim, sName, 1, {22. * k_nnlo_nlo * 400.97, 0.}, EFT::Stat::count);
 
       // prepare the base for interpolation
@@ -173,7 +193,7 @@ int main(/*int argc, char** argv*/) {
                           rate_data, EFT::Stat::xsec, f_shape_data);
       }
       else
-        eft.assignAsData("ctG_0", EFT::Sample::all, false);
+        eft.assignAsData("ctG_0", EFT::Sample::all, true);
 
       // grab the stat correlation matrix given by Jacob
       const std::vector<std::array<int, 2>> covMat_binRange = v_endbin;
@@ -181,10 +201,13 @@ int main(/*int argc, char** argv*/) {
 
       eft.listKeyToFit({ {"ctG", v_opPoint} });
       eft.computeFitChi2(v_sample);
+      
 
-      eft.draw1DChi2({ {"ctG", { "ctG", {/* op range in min, max */}, {0., 9.999}, {-4.999, 9.999} }} }, outDir, v_sample);
+      eft.draw1DChi2({ {"ctG", { "ctG", {-1.0, 1.0}, {0., 9.999}, {-0.3, 0.7} }} }, outDir, v_sample);
 
       eft.clearContent();
+
+      std::cout << "Ling: checking fitresult filename = " << outDir+"ctG_dChi2.root" << std::endl; 
 
       v_current_result.emplace_back(fitResult("ctG", outDir + "ctG_dChi2.root", iVar, iFit, useAll));
       if (v_current_result.back().at(0) == nullptr)
@@ -207,6 +230,8 @@ int main(/*int argc, char** argv*/) {
         iMin = iRes;
       }
     }
+
+    // std::cout << "Ling: checking iMin = " << iMin << std::endl; 
 
     v_fit_var.push_back(iMin);
     std::cout << "EFTFitter: variable " << v_hStr.at(iMin) << " with width " << width << " is the best variable in iteration " << iVar << std::endl;

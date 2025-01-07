@@ -5,6 +5,9 @@
 #include "EFTFitter.h"
 #include "PlotUtil.h"
 #include "TTree.h"
+#include "TGraphAsymmErrors.h"
+#include "TFile.h" 
+#include "TSystem.h"
 
 /***
  * EFTFitter source (public)
@@ -985,7 +988,18 @@ void EFTFitter::prepareInterpolationBase()
     std::cout << std::make_pair(p_op2Eq1.first, std::array<double, 2>{count, std::sqrt(sqerr)}) << std::endl;
   }
 
-  std::cout << "For reference: SM " << statMode << " is " << v_xs_op0->second.at(iXs) << std::endl << std::endl;
+  // std::cout << "For reference: SM " << statMode << " is " << v_xs_op0->second.at(iXs) << std::endl << std::endl;
+
+  // Renormalization Check
+  std::cout << "Renormalization Check:" << std::endl;
+  for (const auto &p_op : m_op1Eq1) {
+    const double total = std::accumulate(p_op.second.begin(), p_op.second.end(), 0.0,
+                                         [] (double sum, const auto &bin) { return sum + bin[0]; });
+    std::cout << "Operator: " << p_op.first.first << " Total: " << total << std::endl;
+  }
+
+  std::cout << "Reference SM xsec: " << v_xs_op0->second.at(iXs) << std::endl;
+
 }
 
 
@@ -1033,6 +1047,125 @@ void EFTFitter::listKeyToFit(const std::map<std::string, std::vector<double>> &m
 
 
 
+// void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgnore)
+// {
+//   const bool rateFit = (fitMode == Fit::hybrid and v_rawBin.empty());
+
+//   if (!hasData or v_keyToFit.empty() or (!m_covMat.count("finalcov") and !rateFit))
+//     throw std::range_error( "This method shouldn't be called given the insuffiencient input! "
+//                             "Ensure contents (inserted with addRawInput() or interpolatable with prepareInterpolationBase()), "
+//                             "list of keys to be fitted on (made with listKeyToFit()) "
+//                             "and final covmat (made with the auto/readCovMat methods and finally makeFinalCovMat()) are available!" );
+
+//   std::cout << "Computing the chi2 for all requested keys..." << std::endl << std::endl;
+
+//   const std::vector<std::array<double, 2>> &dataContent = m_binContent.at({dataName, Sample::all});
+//   const int nBin = dataContent.size(), iXs = (statMode == Stat::xsec) ? 0 : 1;
+//   const double dataInt = getContentSum(dataContent);
+
+//   // ok here we copy and invert the matrix because this is what we actually use
+//   // a bit of shenanigan needed in case of shape fit since we need to ignore one bin for convertible matrix
+//   // on the other hand interpolation needs to see the full template, so it must not be done any earlier
+//   // bin index to ignore means every nth bin in case of stitched templates (assumed to have same nBinEach)
+//   // number of stitched templates obtained assuming shapes sum up to 1
+//   const int nBinEach = (nBin - 2) / int(shapeSum);
+//   const int nHist = (nBin - 2) / nBinEach;
+//   //std::cout << "ignore " << binToIgnore << " nBin " << nBin << " nBinEach " << nBinEach << " nHist " << nHist << std::endl;
+
+//   // reset the bin index in case requested argument doesn't make sense
+//   // probably fine to do so silently, it's only used to verify the bin dropper works correctly
+//   if (binToIgnore >= nBinEach or binToIgnore < 0)
+//     binToIgnore = 1;
+
+//   TMatrixD invMat;
+//   // do nothing for rate fits - no matrix needed as there's no template
+//   if (rateFit)
+//     ;
+//   else if (fitMode != Fit::shape) {
+//     // must resize before copy-assign: https://root.cern.ch/how/how-create-and-fill-matrix
+//     invMat.ResizeTo(m_covMat.at("finalcov"));
+//     invMat = m_covMat.at("finalcov");
+//   }
+//   else {
+//     invMat.ResizeTo(nBin - 2 - nHist, nBin - 2 - nHist);
+
+//     // two indices needed as these run off differently :(
+//     int iShpR = 0, iShpC = 0;
+
+//     for (int iAbsR = 0; iAbsR < nBin - 2; ++iAbsR) {
+//       if (iAbsR % nBinEach == binToIgnore) continue;
+
+//       iShpC = 0;
+//       for (int iAbsC = 0; iAbsC < nBin - 2; ++iAbsC) {
+//         if (iAbsC % nBinEach == binToIgnore) continue;
+
+//         invMat(iShpR, iShpC) = m_covMat.at("finalcov")(iAbsR, iAbsC);
+//         ++iShpC;
+//       }
+
+//       ++iShpR;
+//     }
+//   }
+
+//   // std::cout << "" << TDecompLU(invMat).Condition() << std::endl; // condition number of the matrix
+//   invMat.Invert();
+
+//   for (const auto &key : v_keyToFit) {
+//     for (const auto &samp : v_sample) {
+//       const std::vector<std::array<double, 2>> opContent = interpolateOpValue(key, samp);
+//       const double opInt = getContentSum(opContent);
+
+//       // here they're used as offset counters; increment every time a bin is ignored
+//       int iShpR = 0, iShpC = 0;
+//       double fitChi2 = 0.;
+//       for (int iAbsR = 2; iAbsR < nBin; ++iAbsR) {
+//         if (fitMode == Fit::shape and ((iAbsR - 2) % nBinEach == binToIgnore)) {
+//           ++iShpR;
+//           continue;
+//         }
+
+//         // the actual matrix index, which is strictly related to the actual row/col indices and offset
+//         // but doing it like this improves readability slightly
+//         int iMatR = iAbsR - 2 - iShpR;
+
+//         iShpC = 0;
+//         for (int iAbsC = iAbsR; iAbsC < nBin; ++iAbsC) {
+//           if (fitMode == Fit::shape and ((iAbsC - 2) % nBinEach == binToIgnore)) {
+//             ++iShpC;
+//             continue;
+//           }
+
+//           // std::cout << "Bin " << iAbsR << ": Observed = " << dataContent.at(iAbsR).at(0) << ", Expected = " << opContent.at(iAbsR).at(0) << std::endl;
+            
+//           int iMatC = iAbsC - 2 - iShpC;
+//           double factor = (iMatR == iMatC) ? 1. : 2.;
+
+//           // first compute the bin differences
+//           const double deltaR = (dataInt * dataContent.at(iAbsR).at(0)) - (opInt * opContent.at(iAbsR).at(0));
+//           const double deltaC = (dataInt * dataContent.at(iAbsC).at(0)) - (opInt * opContent.at(iAbsC).at(0));
+
+//           std::cout << "Row: " << iAbsR << ", Col: " << iAbsC
+//                     << " | deltaR: " << deltaR << ", deltaC: " << deltaC
+//                     //<< " | obeserved: " << dataInt * dataContent.at(iAbsR).at(0) << ", expected: " << opInt * opContent.at(iAbsR).at(0)
+//                     << " | invMat(" << iMatR << ", " << iMatC << "): " << invMat(iMatR, iMatC)
+//                     << " | factor: " << factor << std::endl;            
+
+//           fitChi2 += deltaR * deltaC * invMat(iMatR, iMatC) * factor;
+//         }
+//       }
+
+//       if (fitMode == Fit::hybrid and dataContent.at(iXs).at(0) > 0.) {
+//         const double deltaS = dataContent.at(iXs).at(0) - opContent.at(iXs).at(0);
+//         fitChi2 += (deltaS * deltaS) / (dataContent.at(iXs).at(1) * dataContent.at(iXs).at(1));
+//       }
+
+//       m_fitChi2.insert({{key, samp}, fitChi2});
+//     }
+//   }
+
+//   //printAll(m_fitChi2);
+// }
+
 void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgnore)
 {
   const bool rateFit = (fitMode == Fit::hybrid and v_rawBin.empty());
@@ -1049,59 +1182,88 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
   const int nBin = dataContent.size(), iXs = (statMode == Stat::xsec) ? 0 : 1;
   const double dataInt = getContentSum(dataContent);
 
+  std::cout << "Data normalization (integral): " << dataInt << std::endl;  // Print data normalization
+
+  // // Additional normalization checks for all samples
+  // for (const auto &key : v_keyToFit) {
+  //   for (const auto &samp : v_sample) {
+  //     const std::vector<std::array<double, 2>> opContent = interpolateOpValue(key, samp);
+  //     const double opInt = getContentSum(opContent);
+
+  //     std::cout << "Key: " << key << " | Sample: " << samp << " | Expected normalization (integral): " << opInt << std::endl;
+
+  //     if (std::abs(opInt - dataInt) > 1e-6) {
+  //       std::cout << "Warning: Normalization mismatch detected!" << std::endl;
+  //     }
+  //   }
+  // }
+
   // ok here we copy and invert the matrix because this is what we actually use
-  // a bit of shenanigan needed in case of shape fit since we need to ignore one bin for convertible matrix
-  // on the other hand interpolation needs to see the full template, so it must not be done any earlier
-  // bin index to ignore means every nth bin in case of stitched templates (assumed to have same nBinEach)
-  // number of stitched templates obtained assuming shapes sum up to 1
   const int nBinEach = (nBin - 2) / int(shapeSum);
   const int nHist = (nBin - 2) / nBinEach;
-  //std::cout << "ignore " << binToIgnore << " nBin " << nBin << " nBinEach " << nBinEach << " nHist " << nHist << std::endl;
 
-  // reset the bin index in case requested argument doesn't make sense
-  // probably fine to do so silently, it's only used to verify the bin dropper works correctly
+  std::cout << "Ling: checking resizing parameter nBin:" << nBin << ", nHist: " << nHist << std::endl; 
+
   if (binToIgnore >= nBinEach or binToIgnore < 0)
     binToIgnore = 1;
 
-  TMatrixD invMat;
-  // do nothing for rate fits - no matrix needed as there's no template
-  if (rateFit)
-    ;
-  else if (fitMode != Fit::shape) {
-    // must resize before copy-assign: https://root.cern.ch/how/how-create-and-fill-matrix
-    invMat.ResizeTo(m_covMat.at("finalcov"));
-    invMat = m_covMat.at("finalcov");
+  std::cout << "Ling: checking v_rawBin in computeFitChi2: ";
+  for (const auto& val : v_rawBin) {
+      std::cout << val << " ";
   }
-  else {
-    invMat.ResizeTo(nBin - 2 - nHist, nBin - 2 - nHist);
+  std::cout << std::endl; 
 
-    // two indices needed as these run off differently :(
-    int iShpR = 0, iShpC = 0;
+  TMatrixD invMat;
+  if (!rateFit) {
+    if (fitMode != Fit::shape) {
+      invMat.ResizeTo(m_covMat.at("finalcov"));
+      invMat = m_covMat.at("finalcov");
+    } else {
+      invMat.ResizeTo(nBin - 2 - nHist, nBin - 2 - nHist);
+      int iShpR = 0, iShpC = 0;
 
-    for (int iAbsR = 0; iAbsR < nBin - 2; ++iAbsR) {
-      if (iAbsR % nBinEach == binToIgnore) continue;
+      for (int iAbsR = 0; iAbsR < nBin - 2; ++iAbsR) {
+        if (iAbsR % nBinEach == binToIgnore) continue;
 
-      iShpC = 0;
-      for (int iAbsC = 0; iAbsC < nBin - 2; ++iAbsC) {
-        if (iAbsC % nBinEach == binToIgnore) continue;
+        iShpC = 0;
+        for (int iAbsC = 0; iAbsC < nBin - 2; ++iAbsC) {
+          if (iAbsC % nBinEach == binToIgnore) continue;
 
-        invMat(iShpR, iShpC) = m_covMat.at("finalcov")(iAbsR, iAbsC);
-        ++iShpC;
+          invMat(iShpR, iShpC) = m_covMat.at("finalcov")(iAbsR, iAbsC);
+          ++iShpC;
+        }
+        ++iShpR;
       }
-
-      ++iShpR;
     }
   }
 
-  // std::cout << "" << TDecompLU(invMat).Condition() << std::endl; // condition number of the matrix
   invMat.Invert();
+    
+  if (!rateFit) {
+      
+    std::cout << "Original Covariance Matrix (finalcov):" << std::endl;
+    const TMatrixD& originalCovMat = m_covMat.at("finalcov");
+    for (int i = 0; i < originalCovMat.GetNrows(); ++i) {
+        for (int j = 0; j < originalCovMat.GetNcols(); ++j) {
+            std::cout << originalCovMat(i, j) << " ";
+        }
+        std::cout << std::endl;
+    }
+    
+    std::cout << "Inverted Covariance Matrix:" << std::endl;
+    for (int i = 0; i < invMat.GetNrows(); ++i) {
+        for (int j = 0; j < invMat.GetNcols(); ++j) {
+            std::cout << invMat(i, j) << " ";
+        }
+        std::cout << std::endl;
+    }
+  }
 
   for (const auto &key : v_keyToFit) {
     for (const auto &samp : v_sample) {
       const std::vector<std::array<double, 2>> opContent = interpolateOpValue(key, samp);
       const double opInt = getContentSum(opContent);
 
-      // here they're used as offset counters; increment every time a bin is ignored
       int iShpR = 0, iShpC = 0;
       double fitChi2 = 0.;
       for (int iAbsR = 2; iAbsR < nBin; ++iAbsR) {
@@ -1110,24 +1272,21 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
           continue;
         }
 
-        // the actual matrix index, which is strictly related to the actual row/col indices and offset
-        // but doing it like this improves readability slightly
         int iMatR = iAbsR - 2 - iShpR;
-
         iShpC = 0;
         for (int iAbsC = iAbsR; iAbsC < nBin; ++iAbsC) {
           if (fitMode == Fit::shape and ((iAbsC - 2) % nBinEach == binToIgnore)) {
             ++iShpC;
             continue;
           }
+
           int iMatC = iAbsC - 2 - iShpC;
           double factor = (iMatR == iMatC) ? 1. : 2.;
 
-          // first compute the bin differences
           const double deltaR = (dataInt * dataContent.at(iAbsR).at(0)) - (opInt * opContent.at(iAbsR).at(0));
-          const double deltaC = (dataInt * dataContent.at(iAbsC).at(0)) - (opInt * opContent.at(iAbsC).at(0));
-
-          fitChi2 += deltaR * deltaC * invMat(iMatR, iMatC) * factor;
+          const double deltaC = (dataInt * dataContent.at(iAbsC).at(0)) - (opInt * opContent.at(iAbsC).at(0)); 
+            
+          fitChi2 += deltaR * deltaC * invMat(iMatR, iMatC) * factor;  
         }
       }
 
@@ -1139,9 +1298,8 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
       m_fitChi2.insert({{key, samp}, fitChi2});
     }
   }
-
-  //printAll(m_fitChi2);
 }
+
 
 
 
@@ -1285,9 +1443,11 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       const int iMin = std::distance(std::begin(av_opChi2.at(iSamp)), 
                                      std::min_element(std::begin(av_opChi2.at(iSamp)), std::end(av_opChi2.at(iSamp))));
       const double opMin = av_opVal.at(iSamp).at(iMin), chi2Min = av_opChi2.at(iSamp).at(iMin);
-      for (double &chi2 : av_opChi2.at(iSamp)) 
+      std::cout << "Ling: checking chi2 values: " << std::endl;   
+      for (double &chi2 : av_opChi2.at(iSamp)){ 
+        std::cout << chi2 << ", ";   
         av_dChi2.at(iSamp).push_back(chi2 - chi2Min);
-
+      } 
       const double chi2Prob = TMath::Prob(chi2Min, nDoF);
       std::cout << "Minimum for op "<< opName << ", sample " << samp << " found at " << opMin << 
         " with chi2/nDoF " << chi2Min << "/" << nDoF << ", with p-value " << chi2Prob << std::endl;
@@ -1334,13 +1494,27 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       // 1 sigma D, U band
       const std::pair<decltype(itBegin), decltype(itBegin)> p_it1Sig = f_dChi2Band(av_dChi2.at(iSamp), 1.);
 
+      // // check that both iterators are good
+      // if ( p_it1Sig.first == std::end(av_dChi2.at(iSamp)) or p_it1Sig.second == std::end(av_dChi2.at(iSamp)) ) {  
+      //   std::cout << "Requested fit range for operator " << opName << 
+      //     " is insufficient to define the 1 sigma bands! Skipping..." << std::endl;
+      //   drawSig1 = false;
+      // }
+
       // check that both iterators are good
-      if ( p_it1Sig.first == std::end(av_dChi2.at(iSamp)) or p_it1Sig.second == std::end(av_dChi2.at(iSamp)) ) {
+      if ( p_it1Sig.first == std::end(av_dChi2.at(iSamp)) or p_it1Sig.second == std::end(av_dChi2.at(iSamp)) ) {  
         std::cout << "Requested fit range for operator " << opName << 
           " is insufficient to define the 1 sigma bands! Skipping..." << std::endl;
+        std::cout << "p_it1Sig.first: " << (p_it1Sig.first != std::end(av_dChi2.at(iSamp)) ? *p_it1Sig.first : -1) << std::endl;
+        std::cout << "p_it1Sig.second: " << (p_it1Sig.second != std::end(av_dChi2.at(iSamp)) ? *p_it1Sig.second : -1) << std::endl;
+        std::cout << "av_dChi2.at(iSamp): ";
+        for (const auto &val : av_dChi2.at(iSamp)) {
+          std::cout << val << ", ";
+        }
+        std::cout << std::endl;
         drawSig1 = false;
       }
-
+        
       // 2 sigma D, U band
       const std::pair<decltype(itBegin), decltype(itBegin)> p_it2Sig = f_dChi2Band(av_dChi2.at(iSamp), 4.);
 
@@ -1456,30 +1630,93 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       ag_sigma.at(static_cast<int>(v_sample.front())).at(0)->Draw("l");
     }
 
-    for (const auto &g_dChi2 : ag_dChi2) {
-      if (g_dChi2 == nullptr) continue;
-      g_dChi2->Draw("c");
-    }
+    // for (const auto &g_dChi2 : ag_dChi2) {
+    //   if (g_dChi2 == nullptr) continue;
+    //   g_dChi2->Draw("c");
+    // }
 
+    // can->RedrawAxis();
+    // can->SaveAs((plotName + opName + "_dChi2.pdf").c_str());
+    // //can->SaveAs((plotName + opName + "_dChi2.C").c_str());
+
+    // // save them into a file
+    // auto file = std::make_unique<TFile>((plotName + opName + "_dChi2.root").c_str(), "recreate");
+    // file->cd();
+    // //can->Write();
+    // for (const auto &g_dChi2 : ag_dChi2) {
+    //   // std::cout << "Ling checking g_dChi2 = " << g_dChi2 << std::endl; 
+    //   if (g_dChi2 == nullptr) continue; 
+    //   g_dChi2->Write();
+    // }
+    // for (const auto &ag_sig : ag_sigma) {
+    //   for (const auto &g_sig : ag_sig) {
+    //     if (g_sig == nullptr) continue; 
+    //     g_sig->Write();
+    //   }
+    // }
+
+    for (const auto &g_dChi2 : ag_dChi2) {
+        if (g_dChi2 == nullptr) continue; // Check if the object is null
+    
+        if (g_dChi2->GetN() > 0) { // Ensure the graph has points
+            g_dChi2->Draw("c");
+    
+            // Print graph values
+            std::cout << "g_dChi2 Graph Points:" << std::endl;
+            for (int i = 0; i < g_dChi2->GetN(); ++i) {
+                double x, y;
+                g_dChi2->GetPoint(i, x, y);
+                // std::cout << "Point " << i << ": x = " << x << ", y = " << y << std::endl;
+            }
+        }
+    }
+    
     can->RedrawAxis();
     can->SaveAs((plotName + opName + "_dChi2.pdf").c_str());
     //can->SaveAs((plotName + opName + "_dChi2.C").c_str());
-
+    
     // save them into a file
     auto file = std::make_unique<TFile>((plotName + opName + "_dChi2.root").c_str(), "recreate");
     file->cd();
-    //can->Write();
+    
+    // Save g_dChi2 graphs
     for (const auto &g_dChi2 : ag_dChi2) {
-      if (g_dChi2 == nullptr) continue; 
-      g_dChi2->Write();
+        if (g_dChi2 == nullptr) continue; // Check for null pointer
+    
+        if (g_dChi2->GetN() > 0) { // Check that graph has at least one point
+            // Print values before saving
+            std::cout << "Saving g_dChi2 Graph with Points:" << std::endl;
+            for (int i = 0; i < g_dChi2->GetN(); ++i) {
+                double x, y;
+                g_dChi2->GetPoint(i, x, y);
+                // std::cout << "Point " << i << ": x = " << x << ", y = " << y << std::endl;
+            }
+            g_dChi2->Write();
+        } else {
+            std::cout << "Skipping empty g_dChi2 graph." << std::endl;
+        }
     }
+    
+    // Save ag_sigma graphs
     for (const auto &ag_sig : ag_sigma) {
-      for (const auto &g_sig : ag_sig) {
-        if (g_sig == nullptr) continue; 
-        g_sig->Write();
-      }
+        for (const auto &g_sig : ag_sig) {
+            if (g_sig == nullptr) continue; // Check for null pointer
+    
+            if (g_sig->GetN() > 0) { // Check that graph has at least one point
+                // Print values before saving
+                std::cout << "Saving g_sig Graph with Points:" << std::endl;
+                for (int i = 0; i < g_sig->GetN(); ++i) {
+                    double x, y;
+                    g_sig->GetPoint(i, x, y);
+                    std::cout << "Point " << i << ": x = " << x << ", y = " << y << std::endl;
+                }
+                g_sig->Write();
+            } else {
+                std::cout << "Skipping empty g_sig graph." << std::endl;
+            }
+        }
     }
-
+      
     std::cout << std::endl;
   }
 }
@@ -1602,8 +1839,11 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
                                      std::min_element(std::begin(av_opChi2.at(iSamp)), std::end(av_opChi2.at(iSamp))));
       const auto opMin = av_opVal.at(iSamp).at(iMin);
       const double chi2Min = av_opChi2.at(iSamp).at(iMin);
-      for (double &chi2 : av_opChi2.at(iSamp)) 
+      for (double &chi2 : av_opChi2.at(iSamp)){ 
+        std::cout << "Ling: checking chi2 value: " << chi2 << "\n" << std::endl;   
+        std::cout << "Ling: checking  min value: " << chi2Min << "\n" << std::endl;  
         av_dChi2.at(iSamp).push_back(chi2 - chi2Min);
+      }
 
       // make the best fit graph
       const std::vector<double> v_op1Sig0(1, opMin.at(0)), v_op2Sig0(1, opMin.at(1));
@@ -1802,40 +2042,114 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
     ag_zero.at(0)->Draw("l");
     ag_zero.at(1)->Draw("l");
 
+    // for (const auto &samp : v_sample) {
+    //   const int iSamp = static_cast<int>(samp);
+
+    //   if (ag_sigma2.at(iSamp) != nullptr)
+    //     ag_sigma2.at(iSamp)->Draw(a_sampOpt.at(iSamp).c_str());
+
+    //   if (ag_sigma1.at(iSamp) != nullptr)
+    //     ag_sigma1.at(iSamp)->Draw(a_sampOpt.at(iSamp).c_str());
+    // }
+    // for (const auto &g_sigma0 : ag_sigma0) {
+    //   if (g_sigma0 == nullptr) continue;
+    //   g_sigma0->Draw("p");
+    // }
+
+    // can->RedrawAxis();
+    // can->SaveAs((plotName + op1Name + "_" + op2Name + "_dChi2.pdf").c_str());
+    // //can->SaveAs((plotName + op1Name + "_" + op2Name + "_dChi2.C").c_str());
+
+    // // save them into a file
+    // auto file = std::make_unique<TFile>((plotName + op1Name + "_" + op2Name + "_dChi2.root").c_str(), "recreate");
+    // file->cd();
+    // //can->Write();
+    // for (const auto &samp : v_sample) {
+    //   const int iSamp = static_cast<int>(samp);
+
+    //   if (ag_sigma2.at(iSamp) != nullptr)
+    //     ag_sigma2.at(iSamp)->Write();
+
+    //   if (ag_sigma1.at(iSamp) != nullptr)
+    //     ag_sigma1.at(iSamp)->Write();
+    // }
+    // for (const auto &g_sigma0 : ag_sigma0) {
+    //   if (g_sigma0 == nullptr) continue;
+    //   g_sigma0->Write();
+    // }
+
     for (const auto &samp : v_sample) {
-      const int iSamp = static_cast<int>(samp);
-
-      if (ag_sigma2.at(iSamp) != nullptr)
-        ag_sigma2.at(iSamp)->Draw(a_sampOpt.at(iSamp).c_str());
-
-      if (ag_sigma1.at(iSamp) != nullptr)
-        ag_sigma1.at(iSamp)->Draw(a_sampOpt.at(iSamp).c_str());
+        const int iSamp = static_cast<int>(samp);
+    
+        // Print debug information before drawing
+        std::cout << "Processing iSamp: " << iSamp << std::endl;
+    
+        if (iSamp >= ag_sigma2.size() || iSamp >= ag_sigma1.size()) {
+            std::cerr << "Warning: iSamp out of bounds for ag_sigma vectors. Skipping..." << std::endl;
+            continue;
+        }
+    
+        if (ag_sigma2.at(iSamp) != nullptr) {
+            std::cout << "Drawing ag_sigma2[" << iSamp << "] with option: " 
+                      << a_sampOpt.at(iSamp) << std::endl;
+            ag_sigma2.at(iSamp)->Draw(a_sampOpt.at(iSamp).c_str());
+        }
+    
+        if (ag_sigma1.at(iSamp) != nullptr) {
+            std::cout << "Drawing ag_sigma1[" << iSamp << "] with option: " 
+                      << a_sampOpt.at(iSamp) << std::endl;
+            ag_sigma1.at(iSamp)->Draw(a_sampOpt.at(iSamp).c_str());
+        }
     }
+    
     for (const auto &g_sigma0 : ag_sigma0) {
-      if (g_sigma0 == nullptr) continue;
-      g_sigma0->Draw("p");
+        if (g_sigma0 == nullptr) {
+            std::cout << "Skipping nullptr in ag_sigma0." << std::endl;
+            continue;
+        }
+        std::cout << "Drawing g_sigma0." << std::endl;
+        g_sigma0->Draw("p");
     }
-
+    
     can->RedrawAxis();
     can->SaveAs((plotName + op1Name + "_" + op2Name + "_dChi2.pdf").c_str());
-    //can->SaveAs((plotName + op1Name + "_" + op2Name + "_dChi2.C").c_str());
-
-    // save them into a file
+    // can->SaveAs((plotName + op1Name + "_" + op2Name + "_dChi2.C").c_str());
+    
+    // Save them into a file
     auto file = std::make_unique<TFile>((plotName + op1Name + "_" + op2Name + "_dChi2.root").c_str(), "recreate");
     file->cd();
-    //can->Write();
+    
+    std::cout << "Saving histograms to file: " 
+              << (plotName + op1Name + "_" + op2Name + "_dChi2.root") << std::endl;
+    
     for (const auto &samp : v_sample) {
-      const int iSamp = static_cast<int>(samp);
-
-      if (ag_sigma2.at(iSamp) != nullptr)
-        ag_sigma2.at(iSamp)->Write();
-
-      if (ag_sigma1.at(iSamp) != nullptr)
-        ag_sigma1.at(iSamp)->Write();
+        const int iSamp = static_cast<int>(samp);
+    
+        std::cout << "Writing iSamp: " << iSamp << std::endl;
+    
+        if (iSamp >= ag_sigma2.size() || iSamp >= ag_sigma1.size()) {
+            std::cerr << "Warning: iSamp out of bounds for ag_sigma vectors. Skipping..." << std::endl;
+            continue;
+        }
+    
+        if (ag_sigma2.at(iSamp) != nullptr) {
+            std::cout << "Writing ag_sigma2[" << iSamp << "] to file." << std::endl;
+            ag_sigma2.at(iSamp)->Write();
+        }
+    
+        if (ag_sigma1.at(iSamp) != nullptr) {
+            std::cout << "Writing ag_sigma1[" << iSamp << "] to file." << std::endl;
+            ag_sigma1.at(iSamp)->Write();
+        }
     }
+    
     for (const auto &g_sigma0 : ag_sigma0) {
-      if (g_sigma0 == nullptr) continue;
-      g_sigma0->Write();
+        if (g_sigma0 == nullptr) {
+            std::cout << "Skipping nullptr in ag_sigma0 while writing." << std::endl;
+            continue;
+        }
+        std::cout << "Writing g_sigma0 to file." << std::endl;
+        g_sigma0->Write();
     }
 
     std::cout << std::endl;
