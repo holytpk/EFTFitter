@@ -66,7 +66,7 @@ void produceFile(const std::map<std::pair<std::string, std::string>, std::vector
     opStr = opStr + "_" + v_opStr.at(iOp);
   }
 
-  const std::string outName = "/nfs/dust/cms/user/afiqaize/cms/rand/eftRivet_290118/EFTFitter/wbern_0314/root/" + opStr + "_coeff.root";
+  const std::string outName = "./example_fit_input/" + opStr + "_coeff.root";
   const std::vector<std::string> v_syst = {"nominal", "up", "down"};
 
   // to dump all the histograms - vec<pair> rather than map to keep push order

@@ -488,6 +488,16 @@ void EFTFitter::drawHistogram(const std::vector< std::tuple<std::string, Sample,
   can->SaveAs((plotName + ".pdf").c_str());
   //can->SaveAs((plotName + ".C").c_str());
 
+  // Extract the directory path from the plotName (if any)
+  std::string dir;
+  size_t pos = plotName.find_last_of('/');
+  if (pos != std::string::npos)
+    dir = plotName.substr(0, pos);
+  
+  // If there's a directory in the plotName and it doesn't exist, create it
+  if (!dir.empty() && gSystem->AccessPathName(dir.c_str()))
+    gSystem->mkdir(dir.c_str(), kTRUE);
+    
   // save them into a file
   auto file = std::make_unique<TFile>((plotName + ".root").c_str(), "recreate");
   file->cd();
@@ -729,7 +739,12 @@ void EFTFitter::drawCovMat(const std::string &dirName, const std::vector<std::st
     can->cd();
 
     h_cMat->Draw(drawOpt.c_str());
-
+      
+    // Ensure the output directory exists (create recursively if needed)
+    if (gSystem->AccessPathName(dirName.c_str())) {  // returns true if dirName does not exist
+        gSystem->mkdir(dirName.c_str(), kTRUE);       // kTRUE enables recursive creation
+    }
+      
     can->SaveAs((dirName + "cov_" + p_covMat.first + ".pdf").c_str());
     //can->SaveAs((dirName + "cov_" + p_covMat.first + ".C").c_str());
 
@@ -1184,30 +1199,13 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
 
   std::cout << "Data normalization (integral): " << dataInt << std::endl;  // Print data normalization
 
-  // // Additional normalization checks for all samples
-  // for (const auto &key : v_keyToFit) {
-  //   for (const auto &samp : v_sample) {
-  //     const std::vector<std::array<double, 2>> opContent = interpolateOpValue(key, samp);
-  //     const double opInt = getContentSum(opContent);
-
-  //     std::cout << "Key: " << key << " | Sample: " << samp << " | Expected normalization (integral): " << opInt << std::endl;
-
-  //     if (std::abs(opInt - dataInt) > 1e-6) {
-  //       std::cout << "Warning: Normalization mismatch detected!" << std::endl;
-  //     }
-  //   }
-  // }
-
   // ok here we copy and invert the matrix because this is what we actually use
   const int nBinEach = (nBin - 2) / int(shapeSum);
   const int nHist = (nBin - 2) / nBinEach;
 
-  std::cout << "Ling: checking resizing parameter nBin:" << nBin << ", nHist: " << nHist << std::endl; 
-
   if (binToIgnore >= nBinEach or binToIgnore < 0)
     binToIgnore = 1;
 
-  std::cout << "Ling: checking v_rawBin in computeFitChi2: ";
   for (const auto& val : v_rawBin) {
       std::cout << val << " ";
   }
@@ -1237,29 +1235,16 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
     }
   }
 
+  // debug 
+  // std::cout << "Ling: checking input covmat: \n";  
+  // m_covMat.at("finalcov").Print(); 
+
   invMat.Invert();
-    
-  if (!rateFit) {
-      
-    std::cout << "Original Covariance Matrix (finalcov):" << std::endl;
-    const TMatrixD& originalCovMat = m_covMat.at("finalcov");
-    for (int i = 0; i < originalCovMat.GetNrows(); ++i) {
-        for (int j = 0; j < originalCovMat.GetNcols(); ++j) {
-            std::cout << originalCovMat(i, j) << " ";
-        }
-        std::cout << std::endl;
-    }
-    
-    std::cout << "Inverted Covariance Matrix:" << std::endl;
-    for (int i = 0; i < invMat.GetNrows(); ++i) {
-        for (int j = 0; j < invMat.GetNcols(); ++j) {
-            std::cout << invMat(i, j) << " ";
-        }
-        std::cout << std::endl;
-    }
-  }
+  // std::cout << "Ling: checking inverted covmat: \n";
+  // invMat.Print(); 
 
   for (const auto &key : v_keyToFit) {
+    std::size_t ob_index = 0; // debug   
     for (const auto &samp : v_sample) {
       const std::vector<std::array<double, 2>> opContent = interpolateOpValue(key, samp);
       const double opInt = getContentSum(opContent);
@@ -1296,6 +1281,8 @@ void EFTFitter::computeFitChi2(const std::vector<Sample> &v_sample, int binToIgn
       }
 
       m_fitChi2.insert({{key, samp}, fitChi2});
+      // std::cout << "Ling: fitchi2 value at observable " << ob_index << ": " << fitChi2 << std::endl;
+      ++ob_index; 
     }
   }
 }
@@ -1443,9 +1430,8 @@ void EFTFitter::draw1DChi2(const std::map<std::string, std::tuple<std::string, s
       const int iMin = std::distance(std::begin(av_opChi2.at(iSamp)), 
                                      std::min_element(std::begin(av_opChi2.at(iSamp)), std::end(av_opChi2.at(iSamp))));
       const double opMin = av_opVal.at(iSamp).at(iMin), chi2Min = av_opChi2.at(iSamp).at(iMin);
-      std::cout << "Ling: checking chi2 values: " << std::endl;   
-      for (double &chi2 : av_opChi2.at(iSamp)){ 
-        std::cout << chi2 << ", ";   
+      
+      for (double &chi2 : av_opChi2.at(iSamp)){  
         av_dChi2.at(iSamp).push_back(chi2 - chi2Min);
       } 
       const double chi2Prob = TMath::Prob(chi2Min, nDoF);
@@ -1840,8 +1826,6 @@ void EFTFitter::draw2DChi2(const std::map<std::array<std::string, 2>,
       const auto opMin = av_opVal.at(iSamp).at(iMin);
       const double chi2Min = av_opChi2.at(iSamp).at(iMin);
       for (double &chi2 : av_opChi2.at(iSamp)){ 
-        std::cout << "Ling: checking chi2 value: " << chi2 << "\n" << std::endl;   
-        std::cout << "Ling: checking  min value: " << chi2Min << "\n" << std::endl;  
         av_dChi2.at(iSamp).push_back(chi2 - chi2Min);
       }
 
