@@ -50,7 +50,7 @@ int main(/*int argc, char** argv*/) {
   const std::string outDir = "./";
 
   // make the range to interpolate over; in this case [min, max: step]
-  const std::vector<double> v_opPoint = makeInterval(-5., 5., 0.01);
+  const std::vector<double> v_opPoint = makeInterval(-8., 8., 0.01);
   std::vector<EFT::Sample> v_sample; 
   if (useAll)
     v_sample.push_back(EFT::Sample::all);
@@ -80,6 +80,7 @@ int main(/*int argc, char** argv*/) {
 
   // save the rates in case they're used
   // const std::array<double, 2> rate_17_001 = {803., 33.}, rate_18_006 = {836.925, 51.685};
+  // const std::array<double, 2> rate_23_006 = {833.9, ?}
   const std::array<double, 2> rate_data = {836.925, 51.685}, rate_zero = {1., 0.};
   const std::array<double, 2> fake_rate = {1., 0.0};
 
