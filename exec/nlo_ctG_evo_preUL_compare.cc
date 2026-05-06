@@ -129,10 +129,52 @@
 #include <iomanip>
 #include <cstdlib>
 #include <cstdio>
+#include <memory>
 
 static const int BINS_PER_OBS = 6;
 static const int N_OBS_TOTAL = 38;
+static int G_N_OBS_TOTAL = N_OBS_TOTAL;  // runtime: 38 for NanoGEN, 22 for old/preUL fallback
+// When old/preUL data/templates are fitted with the new full Run-2 38-observable
+// covariance, the active old observables must be translated onto the 38-observable
+// covariance ordering before selecting bins.
+static bool G_USE_COV_OBS_MAP = false;
+static std::vector<int> G_COV_OBS_MAP;
+static bool G_USE_DATA_OBS_MAP = false;
+static std::vector<int> G_DATA_OBS_MAP;
 static const std::string THEORY_ORDER = "LO";  // compare LO MC with LO theory
+
+
+std::string getenv_str(const std::string& name, const std::string& def = "") {
+  const char* v = std::getenv(name.c_str());
+  return v ? std::string(v) : def;
+}
+
+bool file_exists_root(const std::string& path) {
+  std::unique_ptr<TFile> f(TFile::Open(path.c_str(), "READ"));
+  return f && !f->IsZombie();
+}
+
+int infer_nobs_from_nbins(int nbins) {
+  if (nbins % BINS_PER_OBS == 0) return nbins / BINS_PER_OBS;
+  if (nbins % (BINS_PER_OBS - 1) == 0) return nbins / (BINS_PER_OBS - 1);
+  return N_OBS_TOTAL;
+}
+
+std::vector<int> filter_obs_available(const std::vector<int>& obs, const std::string& tag = "") {
+  std::vector<int> out;
+  for (int i : obs) {
+    if (i >= 0 && i < G_N_OBS_TOTAL) out.push_back(i);
+    else std::cout << "[WARN obs] dropping unavailable observable " << i
+                   << " for runtime N_OBS=" << G_N_OBS_TOTAL
+                   << (tag.empty() ? "" : (" in " + tag)) << std::endl;
+  }
+  if (out.empty()) {
+    std::stringstream ss;
+    ss << "No usable observables left for " << tag << " with runtime N_OBS=" << G_N_OBS_TOTAL;
+    throw std::runtime_error(ss.str());
+  }
+  return out;
+}
 
 std::vector<int> parse_obs(const std::string& s) {
   std::vector<int> out;
@@ -147,22 +189,82 @@ std::vector<int> parse_obs(const std::string& s) {
 std::vector<int> build_keep_indices(const std::vector<int>& obs, int drop_bin_idx) {
   std::vector<int> keep;
   for (int iobs : obs) {
+    if (iobs < 0 || iobs >= G_N_OBS_TOTAL) {
+      std::cout << "[WARN obs] skip observable " << iobs
+                << " because runtime N_OBS=" << G_N_OBS_TOTAL << std::endl;
+      continue;
+    }
     for (int ibin = 0; ibin < BINS_PER_OBS; ++ibin) {
       if (ibin != drop_bin_idx) keep.push_back(iobs * BINS_PER_OBS + ibin);
     }
   }
+  if (keep.empty()) throw std::runtime_error("build_keep_indices got no valid bins");
   return keep;
 }
 
+std::vector<int> build_keep_indices_nobs(int nobs, int drop_bin_idx) {
+  std::vector<int> keep;
+  for (int iobs = 0; iobs < nobs; ++iobs) {
+    for (int ibin = 0; ibin < BINS_PER_OBS; ++ibin) {
+      if (ibin != drop_bin_idx) keep.push_back(iobs * BINS_PER_OBS + ibin);
+    }
+  }
+  if (keep.empty()) throw std::runtime_error("build_keep_indices_nobs got no valid bins");
+  return keep;
+}
+
+std::vector<int> map_runtime_keep_to_cov_keep(const std::vector<int>& runtime_keep) {
+  std::vector<int> cov_keep;
+  cov_keep.reserve(runtime_keep.size());
+  for (int idx : runtime_keep) {
+    const int runtime_obs = idx / BINS_PER_OBS;
+    const int ibin = idx % BINS_PER_OBS;
+    int cov_obs = runtime_obs;
+    if (G_USE_COV_OBS_MAP) {
+      if (runtime_obs < 0 || runtime_obs >= (int)G_COV_OBS_MAP.size()) {
+        std::stringstream ss;
+        ss << "No covariance observable mapping for runtime observable " << runtime_obs;
+        throw std::runtime_error(ss.str());
+      }
+      cov_obs = G_COV_OBS_MAP[runtime_obs];
+    }
+    cov_keep.push_back(cov_obs * BINS_PER_OBS + ibin);
+  }
+  return cov_keep;
+}
+
+std::vector<int> map_runtime_keep_to_data_keep(const std::vector<int>& runtime_keep) {
+  std::vector<int> data_keep;
+  data_keep.reserve(runtime_keep.size());
+  for (int idx : runtime_keep) {
+    const int runtime_obs = idx / BINS_PER_OBS;
+    const int ibin = idx % BINS_PER_OBS;
+    int data_obs = runtime_obs;
+    if (G_USE_DATA_OBS_MAP) {
+      if (runtime_obs < 0 || runtime_obs >= (int)G_DATA_OBS_MAP.size()) {
+        std::stringstream ss;
+        ss << "No data observable mapping for runtime observable " << runtime_obs;
+        throw std::runtime_error(ss.str());
+      }
+      data_obs = G_DATA_OBS_MAP[runtime_obs];
+    }
+    data_keep.push_back(data_obs * BINS_PER_OBS + ibin);
+  }
+  return data_keep;
+}
+
 TH1* get_hist1(TFile* f, const std::string& key = "diff_cross_section") {
-  TH1* h = dynamic_cast<TH1*>(f->Get(key.c_str()));
-  if (h) return h;
+  std::vector<std::string> keys = {key, "diff_cross_section", "concatenated_diff_cross_section"};
+  for (const auto& kname : keys) {
+    TH1* h = dynamic_cast<TH1*>(f->Get(kname.c_str()));
+    if (h) return h;
+  }
 
   TIter next(f->GetListOfKeys());
   TObject* k = nullptr;
   while ((k = next())) {
     TObject* obj = f->Get(k->GetName());
-    h = dynamic_cast<TH1*>(obj);
+    TH1* h = dynamic_cast<TH1*>(obj);
     if (h) return h;
   }
   return nullptr;
@@ -203,10 +305,9 @@ TMatrixD load_cov_tree_one(const std::string& path,
   const Long64_t nentries = t->GetEntries();
   const int n = (int)nentries;
 
-  double row[228];
-  for (int j = 0; j < 228; ++j) row[j] = 0.0;
+  std::vector<double> row(std::max(512, n), 0.0);
 
-  t->SetBranchAddress(branch_hint.c_str(), row);
+  t->SetBranchAddress(branch_hint.c_str(), row.data());
 
   TMatrixD cov(n, n);
 
@@ -224,7 +325,39 @@ TMatrixD load_cov_tree_one(const std::string& path,
   return cov;
 }
 
+TMatrixD load_cov_hist2(const std::string& path,
+                       const std::string& hist_name = "covariance_matrix") {
+  TFile f(path.c_str(), "READ");
+  if (f.IsZombie()) throw std::runtime_error("Cannot open covariance TH2 file: " + path);
+  TH2* h = dynamic_cast<TH2*>(f.Get(hist_name.c_str()));
+  if (!h) {
+    TIter next(f.GetListOfKeys());
+    TObject* k = nullptr;
+    while ((k = next())) {
+      TObject* obj = f.Get(k->GetName());
+      h = dynamic_cast<TH2*>(obj);
+      if (h) break;
+    }
+  }
+  if (!h) throw std::runtime_error("Cannot find TH2 covariance_matrix in " + path);
+  const int nx = h->GetNbinsX();
+  const int ny = h->GetNbinsY();
+  if (nx != ny) throw std::runtime_error("Covariance TH2 is not square: " + path);
+  TMatrixD cov(nx, nx);
+  for (int i = 0; i < nx; ++i)
+    for (int j = 0; j < nx; ++j)
+      cov(i,j) = h->GetBinContent(i+1, j+1);
+  std::cout << "[OK] loaded covariance TH2 " << path << " as " << nx << "x" << nx << std::endl;
+  return cov;
+}
+
 TMatrixD load_covariance(const std::string& stat_path, const std::string& syst_path) {
+  // Old/preUL fallback from convert_csv_root.html stores one TH2 named covariance_matrix
+  // in covariance_matrix/final_covariance_matrix_preUL.root after dropping bin index 1.
+  if (syst_path.empty() || syst_path == "NONE" || syst_path == "none" || syst_path == stat_path) {
+    return load_cov_hist2(stat_path);
+  }
+
   TMatrixD cov_stat = load_cov_tree_one(stat_path, "stat_1D_variables");
   TMatrixD cov_syst = load_cov_tree_one(syst_path, "syst_1D_variables");
 
@@ -247,26 +380,83 @@ std::vector<double> select_vec(const std::vector<double>& v, const std::vector<i
 TMatrixD select_cov(const TMatrixD& cov_full,
                     const std::vector<int>& keep228,
                     int drop_bin_idx) {
+  const int nobs_runtime = G_N_OBS_TOTAL;
   std::vector<int> allobs;
-  for (int i = 0; i < N_OBS_TOTAL; ++i) allobs.push_back(i);
+  for (int i = 0; i < nobs_runtime; ++i) allobs.push_back(i);
 
   std::vector<int> full_keep = build_keep_indices(allobs, drop_bin_idx);
-
-  std::map<int, int> remap;
-  for (int i = 0; i < (int)full_keep.size(); ++i) remap[full_keep[i]] = i;
+  std::vector<int> cov_full_indices = map_runtime_keep_to_cov_keep(keep228);
 
   std::vector<int> keep_cov;
+  const int nrow = cov_full.GetNrows();
+  const int ncol = cov_full.GetNcols();
+  if (nrow != ncol) {
+    std::stringstream ss;
+    ss << "Covariance is not square: " << nrow << "x" << ncol;
+    throw std::runtime_error(ss.str());
+  }
 
-  if (cov_full.GetNrows() == (int)full_keep.size()) {
-    for (int idx : keep228) keep_cov.push_back(remap.at(idx));
-  } else if (cov_full.GetNrows() == N_OBS_TOTAL * BINS_PER_OBS) {
+  if (nrow == (int)full_keep.size() && !G_USE_COV_OBS_MAP) {
+    // Covariance already has dropped-bin compression in the same runtime observable ordering.
+    std::map<int, int> remap;
+    for (int i = 0; i < (int)full_keep.size(); ++i) remap[full_keep[i]] = i;
+    for (int idx : keep228) {
+      auto it = remap.find(idx);
+      if (it == remap.end()) {
+        std::stringstream ss;
+        ss << "Requested bin " << idx << " is not in compressed covariance map";
+        throw std::runtime_error(ss.str());
+      }
+      keep_cov.push_back(it->second);
+    }
+  } else if (nrow == nobs_runtime * BINS_PER_OBS && !G_USE_COV_OBS_MAP) {
+    // Full covariance in the same runtime observable ordering.
     keep_cov = keep228;
   } else {
-    std::stringstream ss;
-    ss << "Unexpected covariance size: " << cov_full.GetNrows()
-       << ", expected " << full_keep.size()
-       << " or " << N_OBS_TOTAL * BINS_PER_OBS;
-    throw std::runtime_error(ss.str());
+    // Either (a) old/preUL first19 data are using the new 38-observable full Run-2
+    // covariance through G_COV_OBS_MAP, or (b) covariance has more observables than
+    // the active runtime fit and must be sliced.
+    const int inferred = infer_nobs_from_nbins(nrow);
+
+    if (nrow == inferred * BINS_PER_OBS) {
+      // Full covariance, e.g. 38*6=228. Use mapped full-bin indices directly.
+      keep_cov = cov_full_indices;
+      std::cout << "[INFO cov] selecting " << keep_cov.size()
+                << " bins from full covariance with " << inferred
+                << " observables";
+      if (G_USE_COV_OBS_MAP) std::cout << " using runtime->cov observable map";
+      std::cout << std::endl;
+    } else if (nrow == inferred * (BINS_PER_OBS - 1)) {
+      // Compressed covariance, e.g. 38*5=190 or old 22*5=110.
+      std::vector<int> cov_full_keep = build_keep_indices_nobs(inferred, drop_bin_idx);
+      std::map<int, int> cov_remap;
+      for (int i = 0; i < (int)cov_full_keep.size(); ++i) cov_remap[cov_full_keep[i]] = i;
+
+      for (int idx : cov_full_indices) {
+        auto it = cov_remap.find(idx);
+        if (it == cov_remap.end()) {
+          std::stringstream ss;
+          ss << "Requested full-bin index " << idx
+             << " is not available in compressed covariance with " << inferred
+             << " observables";
+          throw std::runtime_error(ss.str());
+        }
+        keep_cov.push_back(it->second);
+      }
+      std::cout << "[INFO cov] selecting " << keep_cov.size()
+                << " bins from compressed covariance with " << inferred
+                << " observables";
+      if (G_USE_COV_OBS_MAP) std::cout << " using runtime->cov observable map";
+      std::cout << std::endl;
+    } else {
+      std::stringstream ss;
+      ss << "Unexpected covariance size: " << nrow
+         << ". Runtime G_N_OBS_TOTAL=" << G_N_OBS_TOTAL
+         << ", expected " << full_keep.size() << " compressed or "
+         << nobs_runtime * BINS_PER_OBS << " full. Inferred nobs=" << inferred
+         << ". Check old22/new38 mode and covariance file.";
+      throw std::runtime_error(ss.str());
+    }
   }
 
   int n = keep_cov.size();
@@ -274,7 +464,15 @@ TMatrixD select_cov(const TMatrixD& cov_full,
 
   for (int i = 0; i < n; ++i) {
     for (int j = 0; j < n; ++j) {
-      out(i, j) = cov_full(keep_cov[i], keep_cov[j]);
+      const int ii = keep_cov[i];
+      const int jj = keep_cov[j];
+      if (ii < 0 || ii >= nrow || jj < 0 || jj >= nrow) {
+        std::stringstream ss;
+        ss << "Covariance index out of range: (" << ii << "," << jj
+           << ") for covariance size " << nrow;
+        throw std::runtime_error(ss.str());
+      }
+      out(i, j) = cov_full(ii, jj);
     }
   }
   return out;
@@ -296,7 +494,7 @@ void save_matrix_inspection_plot(const TMatrixD& m,
   for (int i = 0; i < nr; ++i) {
     for (int j = 0; j < nc; ++j) {
       const double v = m(i, j);
-      h.SetBinContent(j + 1, nr - i, v);
+      h.SetBinContent(j + 1, i + 1, v);
       zmax_abs = std::max(zmax_abs, std::fabs(v));
     }
   }
@@ -350,7 +548,7 @@ void dump_covariance_inspection_plots(const TMatrixD& cov_full,
                               "covariance");
 
   std::vector<int> allobs;
-  for (int i = 0; i < N_OBS_TOTAL; ++i) allobs.push_back(i);
+  for (int i = 0; i < G_N_OBS_TOTAL; ++i) allobs.push_back(i);
   std::vector<int> keep = build_keep_indices(allobs, drop_bin_idx);
 
   TMatrixD cov_reduced = select_cov(cov_full, keep, drop_bin_idx);
@@ -380,12 +578,24 @@ std::string valstr(int v) {
   return std::string(buf);
 }
 
+std::string oldvalstr(int v) {
+  if (v < 0) return "m" + std::to_string(std::abs(v));
+  if (v > 0) return "p" + std::to_string(v);
+  return "p0";
+}
+
 std::string make_template_path(std::string pattern,
                                const std::string& wc,
                                int val) {
   pattern = replace_all(pattern, "{wc}", wc);
   pattern = replace_all(pattern, "{val}", valstr(val));
+  pattern = replace_all(pattern, "{oldval}", oldvalstr(val));
   return pattern;
+}
+
+std::vector<int> template_scan_values(const std::string& pattern) {
+  if (pattern.find("{oldval}") != std::string::npos) return {-2, 0, 2};
+  return {-8, -4, -2, 0, 2, 4, 8};
 }
 
 std::vector<double> block_renorm(std::vector<double> pred,
@@ -589,13 +799,13 @@ FitResult1D fit_one_wc(const std::string& wc,
   std::vector<int> keep = build_keep_indices(obs, drop_bin_idx);
 
   auto data_full = load_values(data_root);
-  auto data = select_vec(data_full, keep);
+  auto data = select_vec(data_full, map_runtime_keep_to_data_keep(keep));
 
   TMatrixD cov = select_cov(cov_full, keep, drop_bin_idx);
   TDecompSVD svd(cov);
   TMatrixD cov_inv = svd.Invert();
 
-  std::vector<int> wc_vals = {-8, -4, -2, 0, 2, 4, 8};
+  std::vector<int> wc_vals = template_scan_values(eft_template_pattern);
   std::map<int, std::vector<double>> tmpl;
 
   for (int v : wc_vals) {
@@ -725,7 +935,7 @@ void fit_2d_pair_grid(const std::string& wc1,
                       double scan_max,
                       int ngrid) {
   std::vector<int> keep = build_keep_indices(obs, drop_bin_idx);
-  auto data = select_vec(load_values(data_root), keep);
+  auto data = select_vec(load_values(data_root), map_runtime_keep_to_data_keep(keep));
 
   TMatrixD cov = select_cov(cov_full, keep, drop_bin_idx);
   TDecompSVD svd(cov);
@@ -981,7 +1191,7 @@ void save_summary_plot(const std::vector<SummaryEntry>& entries,
   const char* pubLabel = isWilsonSummary ? "TOP-22-006 (1#sigma)" : "TOP-18-006 (68% CL)";
   if (!pub_entries.empty()) leg.AddEntry(&dummyPub, pubLabel, "lep");
 
-  std::string fitLabel = "SMEFTsim MC";
+  std::string fitLabel = "UL Data Fit to Dim6Top";
   if (isTheoryLO)  fitLabel = "Theory LO";
   if (isTheoryNLO) fitLabel = "Theory NLO";
   fitLabel += " (68% CL)";
@@ -1684,6 +1894,9 @@ NLO,ctd1,sigma_C_nk+C_kn,quad,0.002,0.003,0.002
 )THEORYCSV";
 
 std::vector<std::string> observable_names() {
+  // Actual 38-observable order in the NanoGEN/full-Run2 ROOT vectors/covariance.
+  // Important: gen_c_kj and gen_c_rq are present at indices 13 and 14 in those
+  // full vectors, while the old preUL 22-observable templates do NOT contain them.
   return {
     "gen_b1k", "gen_b2k", "gen_b1r", "gen_b2r", "gen_b1n", "gen_b2n",
     "gen_b1j", "gen_b2j", "gen_b1q", "gen_b2q",
@@ -1701,6 +1914,28 @@ std::vector<std::string> observable_names() {
     "gen_ll_cHel", "gen_ll_cLab",
     "gen_llbar_delta_phi", "gen_llbar_delta_eta"
   };
+}
+
+std::vector<std::string> old22_observable_names() {
+  // Old/preUL 22-observable order from the CSV templates.
+  // In old22 mode we fit only the first 19 and drop the last 3 lab observables.
+  return {
+    "gen_b1k", "gen_b2k", "gen_b1r", "gen_b2r", "gen_b1n", "gen_b2n",
+    "gen_b1j", "gen_b2j", "gen_b1q", "gen_b2q",
+    "gen_c_kk", "gen_c_rr", "gen_c_nn",
+    "gen_c_Prk", "gen_c_Mrk",
+    "gen_c_Pnr", "gen_c_Mnr",
+    "gen_c_Pnk", "gen_c_Mnk",
+    "gen_ll_cHel", "gen_ll_cLab", "gen_llbar_delta_phi"
+  };
+}
+
+std::vector<std::string> active_observable_names() {
+  std::vector<std::string> names;
+  if (G_USE_DATA_OBS_MAP && G_N_OBS_TOTAL <= 22) names = old22_observable_names();
+  else names = observable_names();
+  if ((int)names.size() > G_N_OBS_TOTAL) names.resize(G_N_OBS_TOTAL);
+  return names;
 }
 
 std::string obs_root_label(const std::string& obs) {
@@ -1794,8 +2029,9 @@ std::map<std::string, HistChunk1D> split_values_into_chunks(const std::vector<do
   // those contents are not raw Poisson counts and this produced O(1-3)
   // fake uncertainties in the per-observable plots.
   std::map<std::string, HistChunk1D> out;
-  const auto names = observable_names();
-  const int nobs = std::min((int)names.size(), (int)vals.size() / BINS_PER_OBS);
+  const int nobs_in = (int)vals.size() / BINS_PER_OBS;
+  const auto names = (G_USE_DATA_OBS_MAP && nobs_in <= 22) ? old22_observable_names() : observable_names();
+  const int nobs = std::min((int)names.size(), nobs_in);
   for (int iobs = 0; iobs < nobs; ++iobs) {
     HistChunk1D c;
     for (int ib = 0; ib < BINS_PER_OBS; ++ib) {
@@ -1816,8 +2052,9 @@ std::map<std::string, HistChunk1D> load_hist_chunks_from_root(const std::string&
   if (!h) throw std::runtime_error("No TH1 found in " + path);
 
   std::map<std::string, HistChunk1D> out;
-  const auto names = observable_names();
-  const int nobs = std::min((int)names.size(), h->GetNbinsX() / BINS_PER_OBS);
+  const int nobs_in = h->GetNbinsX() / BINS_PER_OBS;
+  const auto names = (G_USE_DATA_OBS_MAP && nobs_in <= 22) ? old22_observable_names() : observable_names();
+  const int nobs = std::min((int)names.size(), nobs_in);
 
   for (int iobs = 0; iobs < nobs; ++iobs) {
     HistChunk1D c;
@@ -2134,7 +2371,7 @@ void save_individual_distribution_plot(const std::string& outpng,
   TLegend leg(0.66, 0.70, 0.965, 0.88);
   leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextFont(42); leg.SetTextSize(0.034);
   leg.AddEntry(&hdata, "Data", "lep");
-  leg.AddEntry(&heft, "SMEFTsim MC", "l");
+  leg.AddEntry(&heft, "UL Data Fit to Dim6Top", "l");
   std::string theoryLegend = "Theory ref";
   if (title.find("Theory LO") != std::string::npos) theoryLegend = "Theory LO";
   if (title.find("Theory NLO") != std::string::npos) theoryLegend = "Theory NLO";
@@ -2267,8 +2504,8 @@ std::vector<double> theory_full_values_for_wc_order(const std::map<std::string, 
 
 std::vector<double> flatten_chunks_in_observable_order(const std::map<std::string, HistChunk1D>& chunks, bool errors=false) {
   std::vector<double> out;
-  out.reserve(N_OBS_TOTAL * BINS_PER_OBS);
-  const auto names = observable_names();
+  out.reserve(G_N_OBS_TOTAL * BINS_PER_OBS);
+  auto names = active_observable_names();
   for (const auto& obs : names) {
     auto it = chunks.find(obs);
     for (int ib = 0; ib < BINS_PER_OBS; ++ib) {
@@ -2291,7 +2528,7 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
   const std::string od = outdir + "/inspect_" + wc;
   gSystem->mkdir(od.c_str(), true);
 
-  const auto obs_names = observable_names();
+  auto obs_names = active_observable_names();
   const int nbins = (int)obs_names.size() * BINS_PER_OBS;
   auto data_chunks = load_hist_chunks_from_root(data_root);
   const std::vector<double> data_y = flatten_chunks_in_observable_order(data_chunks, false);
@@ -2303,7 +2540,7 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
     hdata.SetBinError(i + 1, data_e[i]);
   }
 
-  const std::vector<int> vals = {-8, -4, -2, 0, 2, 4, 8};
+  const std::vector<int> vals = template_scan_values(eft_template_pattern);
   const int colors[] = {
     kOrange+7, kAzure+7, kGreen+2, kBlack, kAzure-3, kOrange+1, kMagenta-4
   };
@@ -2356,7 +2593,7 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
         ht->SetDirectory(nullptr);
         for (int i = 0; i < nbins && i < (int)ty.size(); ++i) ht->SetBinContent(i + 1, ty[i]);
         ht->SetLineColor(colors[iv]);
-        ht->SetLineWidth(1);
+        ht->SetLineWidth(4);
         ht->SetLineStyle(2);
         hthy[v] = ht;
       }
@@ -2392,11 +2629,10 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
   hdata.GetYaxis()->SetTitleOffset(0.63);
   hdata.GetYaxis()->SetLabelSize(0.040);
   hdata.GetXaxis()->SetLabelSize(0.0);
-  hdata.SetMaximum(1.8 * std::max(1e-9, ymax));
+  hdata.SetMaximum(std::max(1.0, 1.8 * ymax));
   hdata.SetMinimum(0.0);
   hdata.Draw("E1");
   for (const auto& kv : hmc) kv.second->Draw("hist same");
-  for (const auto& kv : hthy) kv.second->Draw("hist same");
   hdata.Draw("E1 same");
 
   for (int iobs = 1; iobs < (int)obs_names.size(); ++iobs) {
@@ -2407,6 +2643,10 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
     l->SetLineWidth(1);
     l->Draw("same");
   }
+
+  // Draw theory last so the dashed Theory LO/NLO curves are on the top layer.
+  for (const auto& kv : hthy) kv.second->Draw("hist same");
+  hdata.Draw("E1 same");
 
   TLegend leg(0.66, 0.63, 0.94, 0.91);
   leg.SetBorderSize(0);
@@ -2484,7 +2724,7 @@ void make_individual_distribution_plots_and_coefficients_root(const std::string&
   std::ofstream csv(od + "/coefficients_" + wc + ".csv");
   csv << "wc,wc_value,observable,observable_label,data_coefficient,data_coefficient_err,eft_coefficient,eft_coefficient_err,theory_coefficient,theory_coefficient_err\n";
 
-  const std::vector<int> vals = {-8, -4, -2, 0, 2, 4, 8};
+  const std::vector<int> vals = template_scan_values(eft_template_pattern);
   for (int v : vals) {
     std::string path = make_template_path(eft_template_pattern, wc, v);
     try {
@@ -2535,8 +2775,8 @@ std::vector<double> theory_full_values_for_wc_order(const std::map<std::string, 
                                                     const std::string& wc,
                                                     double cval) {
   std::vector<double> out;
-  out.reserve(N_OBS_TOTAL * BINS_PER_OBS);
-  const auto names = observable_names();
+  out.reserve(G_N_OBS_TOTAL * BINS_PER_OBS);
+  auto names = active_observable_names();
   const std::string op = theory_op_from_wc(wc);
   for (const auto& obs : names) {
     HistChunk1D chunk;
@@ -2576,7 +2816,11 @@ FitResult1D fit_one_wc_theory(const std::string& wc,
   std::vector<int> keep = build_keep_indices(obs, drop_bin_idx);
   auto data_chunks = load_hist_chunks_from_root(data_root);
   auto data_full = load_values(data_root);
-  auto data = select_vec(data_full, keep);
+  // In old22/preUL mode the data ROOT is the 38-observable NanoGEN file,
+  // while the active fit vector follows the old first-19 ordering.
+  // Apply the old19 -> new38 map to data only. Theory predictions are
+  // constructed directly in the active old19 order below.
+  auto data = select_vec(data_full, map_runtime_keep_to_data_keep(keep));
 
   TMatrixD cov = select_cov(cov_full, keep, drop_bin_idx);
   TDecompSVD svd(cov);
@@ -2668,7 +2912,7 @@ void fit_2d_pair_grid_theory(const std::string& wc1,
   std::vector<int> keep = build_keep_indices(obs, drop_bin_idx);
   auto data_chunks = load_hist_chunks_from_root(data_root);
   auto data_full = load_values(data_root);
-  auto data = select_vec(data_full, keep);
+  auto data = select_vec(data_full, map_runtime_keep_to_data_keep(keep));
 
   TMatrixD cov = select_cov(cov_full, keep, drop_bin_idx);
   TDecompSVD svd(cov);
@@ -2877,24 +3121,167 @@ void run_theory_fit_suite(const std::string& order,
 }
 
 
+void run_old22_ctg_parallel_suite(const std::string& outdir,
+                                  const std::string& data_root,
+                                  const std::string& eft_template_pattern,
+                                  const TheoryTable& theory_table,
+                                  const TMatrixD& cov_full,
+                                  int drop_bin_idx,
+                                  double scan_min,
+                                  double scan_max,
+                                  int scan_n,
+                                  const std::vector<int>& ctg_obs,
+                                  bool have_theory) {
+  std::cout << "\n[INFO old22] running parallel ctG constraints: SMEFTsim MC, SMEFT theory LO, SMEFT theory NLO" << std::endl;
+
+  const std::string od = outdir + "/parallel_ctG_old19";
+  gSystem->mkdir(od.c_str(), true);
+
+  std::vector<FitResult1D> raw_results;
+  std::vector<SummaryEntry> ctg_summary;
+  std::vector<SummaryEntry> mut_summary;
+
+  const double mt = 0.1725;
+  const double mu_scale = 2.0 * mt * mt;
+
+  FitResult1D r_mc = fit_one_wc("ctGRe", ctg_obs,
+                                "parallel_ctG_old19/SMEFTsim_MC", outdir,
+                                data_root, eft_template_pattern, cov_full,
+                                drop_bin_idx, scan_min, scan_max, scan_n,
+                                1.0, "c_{tG}^{Re} / #Lambda^{2} [TeV^{-2}]");
+  r_mc.name = "ctGRe_SMEFTsim_MC";
+  raw_results.push_back(r_mc);
+  ctg_summary.push_back(make_summary_entry("SMEFTsim_MC", "SMEFTsim MC", r_mc, 1.0));
+  mut_summary.push_back(make_summary_entry("SMEFTsim_MC", "SMEFTsim MC", r_mc, mu_scale));
+
+  if (have_theory) {
+    FitResult1D r_lo = fit_one_wc_theory("ctGRe", ctg_obs,
+                                         "parallel_ctG_old19/SMEFT_theory_LO", outdir,
+                                         data_root, theory_table, "LO", cov_full,
+                                         drop_bin_idx, scan_min, scan_max, scan_n,
+                                         1.0, "c_{tG}^{Re} / #Lambda^{2} [TeV^{-2}]");
+    r_lo.name = "ctGRe_SMEFT_theory_LO";
+    raw_results.push_back(r_lo);
+    ctg_summary.push_back(make_summary_entry("SMEFT_theory_LO", "SMEFT theory LO", r_lo, 1.0));
+    mut_summary.push_back(make_summary_entry("SMEFT_theory_LO", "SMEFT theory LO", r_lo, mu_scale));
+
+    FitResult1D r_nlo = fit_one_wc_theory("ctGRe", ctg_obs,
+                                          "parallel_ctG_old19/SMEFT_theory_NLO", outdir,
+                                          data_root, theory_table, "NLO", cov_full,
+                                          drop_bin_idx, scan_min, scan_max, scan_n,
+                                          1.0, "c_{tG}^{Re} / #Lambda^{2} [TeV^{-2}]");
+    r_nlo.name = "ctGRe_SMEFT_theory_NLO";
+    raw_results.push_back(r_nlo);
+    ctg_summary.push_back(make_summary_entry("SMEFT_theory_NLO", "SMEFT theory NLO", r_nlo, 1.0));
+    mut_summary.push_back(make_summary_entry("SMEFT_theory_NLO", "SMEFT theory NLO", r_nlo, mu_scale));
+  }
+
+  save_summary_plot(ctg_summary,
+                    od + "/summary_ctG_parallel.pdf",
+                    od + "/summary_ctG_parallel.png",
+                    "c_{tG}^{Re} / #Lambda^{2} [TeV^{-2}]", -1.0, 1.0,
+                    "Simulation Work in Progress");
+  save_summary_plot(mut_summary,
+                    od + "/summary_mu_t_parallel.pdf",
+                    od + "/summary_mu_t_parallel.png",
+                    "#hat{#mu}_{t}", -0.2, 0.2,
+                    "Simulation Work in Progress");
+
+  std::ofstream csv(od + "/summary_ctG_parallel.csv");
+  csv << "model,wc,best,lo68,hi68,lo95,hi95,chi2min,nbins\n";
+  for (const auto& r : raw_results) {
+    csv << r.name << ",ctGRe," << r.best << "," << r.lo68 << "," << r.hi68 << ","
+        << r.lo95 << "," << r.hi95 << "," << r.chi2min << "," << r.nbins << "\n";
+  }
+  csv.close();
+
+  std::ofstream obslog(od + "/observable_indices_used.txt");
+  obslog << "Old/preUL first-19 active observable indices used for all three fits:\n";
+  for (size_t i = 0; i < ctg_obs.size(); ++i) obslog << (i ? "," : "") << ctg_obs[i];
+  obslog << "\nold19 -> new38 data/covariance map:\n";
+  for (size_t i = 0; i < G_DATA_OBS_MAP.size(); ++i) obslog << (i ? "," : "") << G_DATA_OBS_MAP[i];
+  obslog << "\n";
+  obslog.close();
+
+  std::cout << "[SAVED old22] parallel ctG summaries in " << od << std::endl;
+}
+
+
 int main() {
-  const std::string data_root =
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen/concatenated_histograms_data.root";
+  // Primary/new NanoGEN inputs. Override any of these with environment variables if needed:
+  //   NLO_CTG_MODE=old22 ./execMacro.sh ...       # force old/preUL 22-observable mode
+  //   DATA_ROOT=... EFT_PATTERN=... COV_STAT=... COV_SYST=... OUTDIR=...
+  std::string data_root = getenv_str("DATA_ROOT",
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen/concatenated_histograms_data.root");
 
-  const std::string eft_template_pattern =
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen/concatenated_histograms_{wc}_{val}.root";
+  std::string eft_template_pattern = getenv_str("EFT_PATTERN",
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen/concatenated_histograms_{wc}_{val}.root");
 
-  // const std::string cov_stat =
-  //   "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/stat_gigantic_matrix_fullRun2.root";
+  std::string cov_stat = getenv_str("COV_STAT",
+    "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/stat_gigantic_matrix_fullRun2.root");
 
-  // const std::string cov_syst =
-  //   "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/syst_gigantic_matrix_fullRun2.root";
-    
-  const std::string cov_stat =
-    "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/stat_gigantic_matrix_fullRun2.root";
+  std::string cov_syst = getenv_str("COV_SYST",
+    "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/syst_gigantic_matrix_fullRun2.root");
 
-  const std::string cov_syst =
-    "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/syst_gigantic_matrix_fullRun2.root";
+  // Old/preUL fallback copied from convert_csv_root.html for ctG templates,
+  // but use the NanoGEN 38-observable data ROOT by default and map old19 -> new38.
+  //   data: /depot/.../histogram_output_nanogen/concatenated_histograms_data.root
+  //   MC:   nlo_ctG_root_density/nlo_ctG_{m2,p0,p2}_nominal_toppt_default_shape_concatenated.root
+  //   cov:  fullRun2 gigantic stat+syst matrices, sliced by old19 -> new38 observable map
+  const bool old22_files_available =
+    file_exists_root("nlo_ctG_root_density/nlo_ctG_p0_nominal_toppt_default_shape_concatenated.root");
+  const std::string mode = getenv_str("NLO_CTG_MODE", "auto");
+  const bool force_old22 = (mode == "old22" || mode == "OLD22" || mode == "preUL");
+  const bool force_new38 = (mode == "new38" || mode == "NEW38" || mode == "nanogen");
+  if (force_old22 || (!force_new38 && !file_exists_root(make_template_path(eft_template_pattern, "ctGRe", 0)) && old22_files_available)) {
+    std::cout << "[INFO mode] using old/preUL ctG-template fallback with NanoGEN data" << std::endl;
+    data_root = getenv_str("DATA_ROOT",
+      "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen/concatenated_histograms_data.root");
+    eft_template_pattern = getenv_str("EFT_PATTERN", "nlo_ctG_root_density/nlo_ctG_{oldval}_nominal_toppt_default_shape_concatenated.root");
+    // Keep the full Run-2 gigantic covariance by default in old22 mode.
+    // Override with COV_STAT/COV_SYST only if explicitly needed.
+    cov_stat = getenv_str("COV_STAT", cov_stat);
+    cov_syst = getenv_str("COV_SYST", cov_syst);
+  }
+
+  // Infer the number of observables from the data histogram. New NanoGEN: 38*6=228; old/preUL: 22*6=132.
+  const int inferred_nobs_from_data = infer_nobs_from_nbins((int)load_values(data_root).size());
+  G_N_OBS_TOTAL = inferred_nobs_from_data;
+  if (force_old22 || (!force_new38 && old22_files_available)) {
+    std::cout << "[INFO mode] old/preUL input has " << inferred_nobs_from_data
+              << " observables, but fitting only first 19; excluding last 3 lab observables" << std::endl;
+    G_N_OBS_TOTAL = 19;
+    G_USE_COV_OBS_MAP = true;
+    G_USE_DATA_OBS_MAP = true;
+    // Old/preUL first-19 observable order:
+    //   b1k,b2k,b1r,b2r,b1n,b2n,b1j,b2j,b1q,b2q,
+    //   ckk,crr,cnn,Crk+,Crk-,Cnr+,Cnr-,Cnk+,Cnk-
+    // Corresponding indices in the actual 38-observable NanoGEN/full-Run2 order:
+    //   0..12 are the same, then skip gen_c_kj/gen_c_rq at indices 13/14,
+    //   and take gen_c_Prk,gen_c_Mrk,gen_c_Pnr,gen_c_Mnr,gen_c_Pnk,gen_c_Mnk
+    //   at indices 15..20.
+    G_COV_OBS_MAP  = {0,1,2,3,4,5,6,7,8,9,10,11,12,15,16,17,18,19,20};
+    G_DATA_OBS_MAP = G_COV_OBS_MAP;
+  } else {
+    G_USE_COV_OBS_MAP = false;
+    G_USE_DATA_OBS_MAP = false;
+    G_COV_OBS_MAP.clear();
+    G_DATA_OBS_MAP.clear();
+  }
+  if (G_USE_COV_OBS_MAP) {
+    std::cout << "[INFO mode] old19 -> fullRun2 covariance observable map:";
+    for (int x : G_COV_OBS_MAP) std::cout << " " << x;
+    std::cout << std::endl;
+  }
+  if (G_USE_DATA_OBS_MAP) {
+    std::cout << "[INFO mode] old19 -> NanoGEN data observable map:";
+    for (int x : G_DATA_OBS_MAP) std::cout << " " << x;
+    std::cout << std::endl;
+  }
+  std::cout << "[INFO mode] data_root=" << data_root << std::endl;
+  std::cout << "[INFO mode] eft_template_pattern=" << eft_template_pattern << std::endl;
+  std::cout << "[INFO mode] covariance stat/single=" << cov_stat << " syst=" << cov_syst << std::endl;
+  std::cout << "[INFO mode] runtime observables=" << G_N_OBS_TOTAL << std::endl;
 
   const int drop_bin_idx = 1;
   const double scan_min = -20.0;
@@ -2902,7 +3289,7 @@ int main() {
   const int scan_n = 10000;
   const int scan2d_n = 121;
 
-  const std::string outdir = "nanogen_fits_root";
+  const std::string outdir = getenv_str("OUTDIR", ((force_old22 || (!force_new38 && old22_files_available)) ? "nanogen_fits_root_old22_ctG_first19" : "nanogen_fits_root"));
   gSystem->mkdir(outdir.c_str(), true);
 
   TheoryTable theory_table = load_embedded_theory_csv();
@@ -2919,13 +3306,17 @@ int main() {
   TMatrixD cov_full = load_covariance(cov_stat, cov_syst);
   dump_covariance_inspection_plots(cov_full, outdir, drop_bin_idx);
 
-  const std::vector<std::string> wc_list = {
+  std::vector<std::string> wc_list = {
     "ctGRe", "ctGIm",
     "cQj11", "cQj31", "cQj18", "cQj38",
     "cQu1", "cQu8", "cQd1", "cQd8",
     "ctu1", "ctu8", "ctd1", "ctd8",
     "ctj1", "ctj8"
   };
+  if (force_old22 || (!force_new38 && old22_files_available && G_N_OBS_TOTAL == 19)) {
+    wc_list = {"ctGRe"};
+    std::cout << "[INFO mode] old22 fallback fits only ctGRe, matching the old ctG-only MC templates" << std::endl;
+  }
 
   // Observable index convention follows your 0..37 screenshot and NanoGEN concatenation.
   // Known anchors from your screenshot: 34=cHel, 25=csca, 0=b1k, 2=b1r, 4=b1n, 10=ckk, 12=cnn.
@@ -2937,12 +3328,24 @@ int main() {
   const int OBS_csca = 25, OBS_cHel = 34;
 
   std::map<std::string, std::vector<int>> obs_sets;
-  obs_sets["AN22_028_Fig16_mu_t_1D"] = {OBS_cHel, OBS_csca, OBS_b1k, OBS_ckk};
-  obs_sets["AN22_028_Fig18_mu_t_vs_d_t"] = {OBS_cHel, OBS_csca, OBS_cnrM, OBS_cnkM};
-  obs_sets["AN22_028_Fig18_mu_t_vs_cVV"] = {OBS_cHel, OBS_csca, OBS_ckk, OBS_b1r};
-  obs_sets["AN22_028_Fig18_d_t_vs_cMinusMinus"] = {OBS_cnrM, OBS_cnkM, OBS_b1n, OBS_b1k};
-  obs_sets["AN22_028_Fig18_cVV_vs_c1"] = {OBS_cHel, OBS_cnn, OBS_ckk, OBS_b1r};
-  obs_sets["all_0_35"] = range_obs(0, 35);
+  if (G_N_OBS_TOTAL >= 36) {
+    obs_sets["AN22_028_Fig16_mu_t_1D"] = {OBS_cHel, OBS_csca, OBS_b1k, OBS_ckk};
+    obs_sets["AN22_028_Fig18_mu_t_vs_d_t"] = {OBS_cHel, OBS_csca, OBS_cnrM, OBS_cnkM};
+    obs_sets["AN22_028_Fig18_mu_t_vs_cVV"] = {OBS_cHel, OBS_csca, OBS_ckk, OBS_b1r};
+    obs_sets["AN22_028_Fig18_d_t_vs_cMinusMinus"] = {OBS_cnrM, OBS_cnkM, OBS_b1n, OBS_b1k};
+    obs_sets["AN22_028_Fig18_cVV_vs_c1"] = {OBS_cHel, OBS_cnn, OBS_ckk, OBS_b1r};
+    obs_sets["all_0_35"] = range_obs(0, 35);
+  } else {
+    // Old/preUL 22-observable layout from convert_csv_root.html: block_structure=np.arange(132).reshape(-1,6).
+    // The notebook used selected_observables=[9,11,12,18] for the compact ctG constraint,
+    // and [0..18] for the broader old ctG scan. Keep the compact one as default for ctG.
+    obs_sets["AN22_028_Fig16_mu_t_1D"] = {9, 11, 12, 18};
+    obs_sets["AN22_028_Fig18_mu_t_vs_d_t"] = {9, 11, 12, 18};
+    obs_sets["AN22_028_Fig18_mu_t_vs_cVV"] = {9, 11, 12, 18};
+    obs_sets["AN22_028_Fig18_d_t_vs_cMinusMinus"] = {9, 11, 12, 18};
+    obs_sets["AN22_028_Fig18_cVV_vs_c1"] = {9, 11, 12, 18};
+    obs_sets["all_0_35"] = range_obs(0, std::min(18, G_N_OBS_TOTAL - 1));
+  }
 
   std::vector<FitResult1D> results;
   std::map<std::string, FitResult1D> result_by_key;
@@ -2958,21 +3361,30 @@ int main() {
                                 mu_scale, "#hat{#mu}_{t}");
   results.push_back(r_mu); result_by_key["mu_t"] = r_mu;
 
-  FitResult1D r_dt = fit_one_wc("ctGIm", obs_sets["AN22_028_Fig18_mu_t_vs_d_t"],
-                                "AN22_028_d_t_CPodd_1D", outdir,
-                                data_root, eft_template_pattern, cov_full,
-                                drop_bin_idx, scan_min, scan_max, scan_n,
-                                mu_scale, "#hat{d}_{t}");
-  results.push_back(r_dt); result_by_key["d_t"] = r_dt;
+  if (G_N_OBS_TOTAL >= 36) {
+    FitResult1D r_dt = fit_one_wc("ctGIm", obs_sets["AN22_028_Fig18_mu_t_vs_d_t"],
+                                  "AN22_028_d_t_CPodd_1D", outdir,
+                                  data_root, eft_template_pattern, cov_full,
+                                  drop_bin_idx, scan_min, scan_max, scan_n,
+                                  mu_scale, "#hat{d}_{t}");
+    results.push_back(r_dt); result_by_key["d_t"] = r_dt;
+  }
 
   // --- Fig.16 per-WC observable fits ---
-  std::map<std::string, std::vector<int>> FIG16_OBS = {
-    {"ctGRe", {OBS_cHel, OBS_csca, OBS_b1k, OBS_ckk}},
-    {"ctGIm", {OBS_cnrM, OBS_cnkM, OBS_b1n, OBS_b1k}},
-    {"cQj18", {OBS_cHel, OBS_cnn, OBS_ckk, OBS_b1r}},   // cVV proxy
-    {"ctj8",  {OBS_cnrM, OBS_cnkM, OBS_b1n, OBS_b1k}},  // c-- proxy
-    {"cQj38", {OBS_cHel, OBS_cnn, OBS_ckk, OBS_b1r}}    // c1 proxy
-  };
+  std::map<std::string, std::vector<int>> FIG16_OBS;
+  if (G_N_OBS_TOTAL >= 36) {
+    FIG16_OBS = {
+      {"ctGRe", {OBS_cHel, OBS_csca, OBS_b1k, OBS_ckk}},
+      {"ctGIm", {OBS_cnrM, OBS_cnkM, OBS_b1n, OBS_b1k}},
+      {"cQj18", {OBS_cHel, OBS_cnn, OBS_ckk, OBS_b1r}},
+      {"ctj8",  {OBS_cnrM, OBS_cnkM, OBS_b1n, OBS_b1k}},
+      {"cQj38", {OBS_cHel, OBS_cnn, OBS_ckk, OBS_b1r}}
+    };
+  } else {
+    // Old/preUL mode: use all first-19 distributions for the ctG constraint.
+    // The last three lab observables from the old 22 are intentionally excluded.
+    FIG16_OBS = {{"ctGRe", obs_sets["all_0_35"]}};
+  }
 
   for (const auto& wc : wc_list) {
     std::vector<int> obs = obs_sets["all_0_35"];
@@ -3025,8 +3437,8 @@ int main() {
   const double MT = 0.1725;
   const double GS = 1.1666;
   const double norm = MT*MT/(GS*GS);
-  anom_summary.push_back(make_summary_entry("mu_t", "#hat{#mu}_{t}", result_by_key["ctGRe"], 2.0*MT*MT));
-  anom_summary.push_back(make_summary_entry("d_t", "#hat{d}_{t}", result_by_key["ctGIm"], 2.0*MT*MT));
+  if (result_by_key.count("ctGRe")) anom_summary.push_back(make_summary_entry("mu_t", "#hat{#mu}_{t}", result_by_key["ctGRe"], 2.0*MT*MT));
+  if (result_by_key.count("ctGIm")) anom_summary.push_back(make_summary_entry("d_t", "#hat{d}_{t}", result_by_key["ctGIm"], 2.0*MT*MT));
   add_linear_anom("cVV", "#hat{c}_{VV}", {{"ctj8",0.5},{"cQj18",0.5},{"ctu8",0.25},{"ctd8",0.25},{"cQu8",0.25},{"cQd8",0.25}}, norm);
   add_linear_anom("cVA", "#hat{c}_{VA}", {{"ctj8",0.5},{"cQj18",-0.5},{"ctu8",0.25},{"ctd8",0.25},{"cQu8",-0.25},{"cQd8",-0.25}}, norm);
   add_linear_anom("cAV", "#hat{c}_{AV}", {{"ctj8",-0.5},{"cQj18",-0.5},{"ctu8",0.25},{"ctd8",0.25},{"cQu8",0.25},{"cQd8",0.25}}, norm);
@@ -3050,6 +3462,14 @@ int main() {
                     "Work in Progress", cms_pub);
   write_summary_csv(anom_summary, outdir + "/summary_anomalous_couplings.csv");
 
+
+  if (force_old22 || (!force_new38 && old22_files_available && G_N_OBS_TOTAL == 19)) {
+    run_old22_ctg_parallel_suite(outdir, data_root, eft_template_pattern,
+                                 theory_table, cov_full, drop_bin_idx,
+                                 scan_min, scan_max, scan_n,
+                                 obs_sets["all_0_35"], have_theory);
+  }
+
   // AN-22-028 Fig.18 2D observable choices:
   //   mu_t,d_t: chel,csca,cnr-crn,cnk-ckn
   //   mu_t,cVV: chel,csca,ckk,b1r
@@ -3062,11 +3482,15 @@ int main() {
     {"ctGIm", "ctj8", "AN22_028_Fig18_ctGIm_vs_ctj8_cMinusMinus_proxy", obs_sets["AN22_028_Fig18_d_t_vs_cMinusMinus"], -8.0, 8.0},
     {"cQj18", "cQj38", "AN22_028_Fig18_cQj18_cVV_proxy_vs_cQj38_c1_proxy", obs_sets["AN22_028_Fig18_cVV_vs_c1"], -8.0, 8.0}
   };
-  for (const auto& spec : fig18_pairs) {
-    fit_2d_pair_grid_if_available(spec, outdir, data_root, eft_template_pattern, cov_full, drop_bin_idx, scan2d_n);
+  if (G_N_OBS_TOTAL >= 36) {
+    for (const auto& spec : fig18_pairs) {
+      fit_2d_pair_grid_if_available(spec, outdir, data_root, eft_template_pattern, cov_full, drop_bin_idx, scan2d_n);
+    }
+  } else {
+    std::cout << "[INFO mode] skip 2D proxy fits in old22 fallback; only ctGRe 1D constraint is meaningful for the old ctG-only MC." << std::endl;
   }
 
-  if (have_theory) {
+  if (have_theory && G_N_OBS_TOTAL >= 36) {
     run_theory_fit_suite("LO", "_theory_lo", outdir, data_root, theory_table, cov_full,
                          drop_bin_idx, scan_min, scan_max, scan_n, scan2d_n,
                          wc_list, obs_sets, FIG16_OBS, fig18_pairs);
