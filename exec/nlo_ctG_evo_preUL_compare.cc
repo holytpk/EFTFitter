@@ -1,3 +1,5 @@
+// Run command: NLO_CTG_MODE=old22 OUTDIR=UL_EFTMC_old19 DATA_ROOT=/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_data.root EFT_PATTERN=/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_{wc}_{val}.root COV_STAT=/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/stat_gigantic_matrix_fullRun2.root COV_SYST=/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/syst_gigantic_matrix_fullRun2.root ./execMacro.sh nlo_ctG_evo_preUL_compare_-8to8.cc
+
 // -----------------------------------------------------------------------------
 // Example: how the per-bin theory histogram is constructed for gen_c_kk
 // at ctG = 2.0 using the inclusive SMEFT theory coefficients.
@@ -479,6 +481,77 @@ TMatrixD select_cov(const TMatrixD& cov_full,
 }
 
 
+
+std::vector<std::string> observable_names();
+std::vector<std::string> old22_observable_names();
+std::vector<std::string> active_observable_names();
+std::string obs_root_label(const std::string& obs);
+
+std::vector<std::string> matrix_obs_labels_for_size(int n, int& block_size) {
+  block_size = 0;
+  std::vector<std::string> labels;
+  const auto active = active_observable_names();
+  const auto full = observable_names();
+  const auto old = old22_observable_names();
+
+  auto try_pick = [&](const std::vector<std::string>& names, int block) -> bool {
+    if (block <= 0) return false;
+    if (n == (int)names.size() * block) {
+      labels = names;
+      block_size = block;
+      return true;
+    }
+    return false;
+  };
+
+  // Full and reduced covariance matrices can be either 6 bins/obs or 5 bins/obs
+  // after one dropped bin.  Prefer the active runtime list, then fall back to
+  // the full NanoGEN-38 and old/preUL-22 lists.
+  if (try_pick(active, BINS_PER_OBS)) return labels;
+  if (try_pick(active, BINS_PER_OBS - 1)) return labels;
+  if (try_pick(full, BINS_PER_OBS)) return labels;
+  if (try_pick(full, BINS_PER_OBS - 1)) return labels;
+  if (try_pick(old, BINS_PER_OBS)) return labels;
+  if (try_pick(old, BINS_PER_OBS - 1)) return labels;
+  return labels;
+}
+
+void draw_matrix_observable_labels(int nc, int nr) {
+  int bx = 0, by = 0;
+  std::vector<std::string> xlabels = matrix_obs_labels_for_size(nc, bx);
+  std::vector<std::string> ylabels = matrix_obs_labels_for_size(nr, by);
+  if (xlabels.empty() || ylabels.empty() || bx <= 0 || by <= 0) return;
+
+  gPad->Update();
+  const double lm = gPad->GetLeftMargin();
+  const double rm = gPad->GetRightMargin();
+  const double bm = gPad->GetBottomMargin();
+  const double tm = gPad->GetTopMargin();
+  const double xw = 1.0 - lm - rm;
+  const double yh = 1.0 - bm - tm;
+
+  TLatex lab;
+  lab.SetNDC(true);
+  lab.SetTextFont(42);
+  lab.SetTextSize(0.016);
+
+  lab.SetTextAngle(60);
+  lab.SetTextAlign(33);
+  for (int i = 0; i < (int)xlabels.size(); ++i) {
+    const double xc = (i + 0.5) * bx;
+    const double xndc = lm + xw * (xc / std::max(1, nc));
+    lab.DrawLatex(xndc, bm * 0.72, obs_root_label(xlabels[i]).c_str());
+  }
+
+  lab.SetTextAngle(0);
+  lab.SetTextAlign(32);
+  for (int i = 0; i < (int)ylabels.size(); ++i) {
+    const double yc = (i + 0.5) * by;
+    const double yndc = bm + yh * (yc / std::max(1, nr));
+    lab.DrawLatex(lm * 0.88, yndc, obs_root_label(ylabels[i]).c_str());
+  }
+}
+
 void save_matrix_inspection_plot(const TMatrixD& m,
                                  const std::string& outdir,
                                  const std::string& tag,
@@ -499,8 +572,8 @@ void save_matrix_inspection_plot(const TMatrixD& m,
     }
   }
   h.SetTitle("");
-  h.GetXaxis()->SetTitle("matrix column");
-  h.GetYaxis()->SetTitle("matrix row");
+  h.GetXaxis()->SetTitle("observable/bin column");
+  h.GetYaxis()->SetTitle("observable/bin row");
   h.GetZaxis()->SetTitle(ztitle.c_str());
   h.GetXaxis()->SetTitleSize(0.045);
   h.GetYaxis()->SetTitleSize(0.045);
@@ -512,12 +585,13 @@ void save_matrix_inspection_plot(const TMatrixD& m,
 
   TCanvas c(("c_" + tag).c_str(), ("c_" + tag).c_str(), 900, 760);
   
-  gStyle->SetOptStat(0);c.SetLeftMargin(0.12);
+  gStyle->SetOptStat(0);c.SetLeftMargin(0.20);
   c.SetRightMargin(0.18);
-  c.SetBottomMargin(0.11);
+  c.SetBottomMargin(0.24);
   c.SetTopMargin(0.08);
   h.SetStats(0);
   h.Draw("COLZ");
+  draw_matrix_observable_labels(nc, nr);
 
   TLatex lat;
   lat.SetNDC(true);
@@ -806,11 +880,26 @@ FitResult1D fit_one_wc(const std::string& wc,
   TMatrixD cov_inv = svd.Invert();
 
   std::vector<int> wc_vals = template_scan_values(eft_template_pattern);
+  if (wc == "ctGRe") {
+    std::cout << "[INFO ctG scan] " << wc << " template points:";
+    for (int x : wc_vals) std::cout << " " << x;
+    std::cout << std::endl;
+  }
   std::map<int, std::vector<double>> tmpl;
 
   for (int v : wc_vals) {
     std::string path = make_template_path(eft_template_pattern, wc, v);
-    tmpl[v] = select_vec(load_values(path), keep);
+    auto tmpl_full = load_values(path);
+    const int tmpl_nobs = infer_nobs_from_nbins((int)tmpl_full.size());
+    // In old22 mode with Dim6Top NanoGEN templates, the template vector is in
+    // the full 38-observable order.  Select the same mapped old19 bins used for
+    // the UL data/covariance.  If a truly old 22-observable template is supplied
+    // via EFT_PATTERN, keep the original old22 indexing.
+    if (G_USE_DATA_OBS_MAP && tmpl_nobs >= 38) {
+      tmpl[v] = select_vec(tmpl_full, map_runtime_keep_to_data_keep(keep));
+    } else {
+      tmpl[v] = select_vec(tmpl_full, keep);
+    }
   }
 
   const int nb = data.size();
@@ -922,6 +1011,177 @@ js.close();
   return r;
 }
 
+
+// Fit using a bias-corrected pseudo-data vector:
+//   data_shifted = data - [template(shift_ctg_value) - template(0)]
+// For the current old22 NanoGEN study, shift_ctg_value=-2 tests whether the
+// apparent ctGRe ~= -2 preference is just an MC-template baseline bias. If the
+// effect is purely a template bias, this shifted-data fit should move back
+// toward ctGRe = 0.
+FitResult1D fit_one_wc_shifted_data(const std::string& wc,
+                                    const std::vector<int>& obs,
+                                    const std::string& tag,
+                                    const std::string& outdir,
+                                    const std::string& data_root,
+                                    const std::string& eft_template_pattern,
+                                    const TMatrixD& cov_full,
+                                    int drop_bin_idx,
+                                    double scan_min,
+                                    double scan_max,
+                                    int scan_n,
+                                    int shift_ctg_value,
+                                    double xscale = 1.0,
+                                    const std::string& xlabel_override = "") {
+  std::vector<int> keep = build_keep_indices(obs, drop_bin_idx);
+
+  auto data_full = load_values(data_root);
+  auto data = select_vec(data_full, map_runtime_keep_to_data_keep(keep));
+
+  TMatrixD cov = select_cov(cov_full, keep, drop_bin_idx);
+  TDecompSVD svd(cov);
+  TMatrixD cov_inv = svd.Invert();
+
+  std::vector<int> wc_vals = template_scan_values(eft_template_pattern);
+  if (std::find(wc_vals.begin(), wc_vals.end(), 0) == wc_vals.end()) {
+    throw std::runtime_error("shifted-data fit needs a zero template");
+  }
+  if (std::find(wc_vals.begin(), wc_vals.end(), shift_ctg_value) == wc_vals.end()) {
+    std::stringstream ss;
+    ss << "shifted-data fit needs template at " << shift_ctg_value;
+    throw std::runtime_error(ss.str());
+  }
+
+  std::cout << "[INFO shifted data] building pseudo-data = data - [T(" << shift_ctg_value
+            << ") - T(0)] for " << wc << std::endl;
+
+  std::map<int, std::vector<double>> tmpl;
+  for (int v : wc_vals) {
+    std::string path = make_template_path(eft_template_pattern, wc, v);
+    auto tmpl_full = load_values(path);
+    const int tmpl_nobs = infer_nobs_from_nbins((int)tmpl_full.size());
+    if (G_USE_DATA_OBS_MAP && tmpl_nobs >= 38) {
+      tmpl[v] = select_vec(tmpl_full, map_runtime_keep_to_data_keep(keep));
+    } else {
+      tmpl[v] = select_vec(tmpl_full, keep);
+    }
+  }
+
+  const int nb = data.size();
+  std::vector<double> data_shifted(nb, 0.0);
+  for (int i = 0; i < nb; ++i) {
+    data_shifted[i] = data[i] - (tmpl[shift_ctg_value][i] - tmpl[0][i]);
+  }
+
+  TMatrixD X(wc_vals.size(), 3);
+  for (int i = 0; i < (int)wc_vals.size(); ++i) {
+    double x = wc_vals[i];
+    X(i, 0) = 1.0;
+    X(i, 1) = x;
+    X(i, 2) = x * x;
+  }
+
+  TDecompSVD xsvd(X);
+  TMatrixD Xpinv = xsvd.Invert();
+
+  std::vector<double> A(nb), B(nb), C(nb);
+  for (int ib = 0; ib < nb; ++ib) {
+    TVectorD y(wc_vals.size());
+    for (int i = 0; i < (int)wc_vals.size(); ++i) y(i) = tmpl[wc_vals[i]][ib];
+    TVectorD beta = Xpinv * y;
+    A[ib] = beta(0);
+    B[ib] = beta(1);
+    C[ib] = beta(2);
+  }
+
+  auto pred_at = [&](double x) {
+    std::vector<double> p(nb);
+    for (int i = 0; i < nb; ++i) p[i] = A[i] + B[i] * x + C[i] * x * x;
+    return block_renorm(p, tmpl[0], BINS_PER_OBS - 1);
+  };
+
+  auto chi2_at = [&](double x) {
+    auto p = pred_at(x);
+    TVectorD d(nb);
+    for (int i = 0; i < nb; ++i) d(i) = data_shifted[i] - p[i];
+    TVectorD tmp = cov_inv * d;
+    return d * tmp;
+  };
+
+  std::vector<double> xs(scan_n), chi(scan_n), dchi(scan_n);
+  double best = 0.0, chi_min = 1e300;
+
+  for (int i = 0; i < scan_n; ++i) {
+    double x = scan_min + (scan_max - scan_min) * double(i) / double(scan_n - 1);
+    xs[i] = x;
+    chi[i] = chi2_at(x);
+    if (chi[i] < chi_min) {
+      chi_min = chi[i];
+      best = x;
+    }
+  }
+
+  for (int i = 0; i < scan_n; ++i) dchi[i] = chi[i] - chi_min;
+
+  auto i68 = interval_crossing(xs, dchi, 1.0, best);
+  auto i95 = interval_crossing(xs, dchi, 4.0, best);
+
+  FitResult1D r;
+  r.name = wc;
+  r.label = pretty_label(wc);
+  r.best = best;
+  r.chi2min = chi_min;
+  r.lo68 = i68.first;
+  r.hi68 = i68.second;
+  r.lo95 = i95.first;
+  r.hi95 = i95.second;
+  r.nbins = nb;
+
+  const std::string od = outdir + "/" + tag;
+  gSystem->mkdir(od.c_str(), true);
+
+  std::ofstream csv(od + "/scan_" + wc + "_data_shift_m2.csv");
+  csv << wc << ",chi2,delta_chi2\n";
+  for (int i = 0; i < scan_n; ++i) csv << xs[i] << "," << chi[i] << "," << dchi[i] << "\n";
+  csv.close();
+
+  std::ofstream js(od + "/fit_result_" + wc + "_data_shift_m2.json");
+  js << "{\n";
+  js << "  \"wc\": \"" << wc << "\",\n";
+  js << "  \"tag\": \"" << tag << "\",\n";
+  js << "  \"data_shift_definition\": \"data - [template(" << shift_ctg_value << ") - template(0)]\",\n";
+  js << "  \"shift_ctg_value\": " << shift_ctg_value << ",\n";
+  js << "  \"best\": " << r.best << ",\n";
+  js << "  \"chi2_min\": " << r.chi2min << ",\n";
+  js << "  \"lo68\": " << r.lo68 << ",\n";
+  js << "  \"hi68\": " << r.hi68 << ",\n";
+  js << "  \"lo95\": " << r.lo95 << ",\n";
+  js << "  \"hi95\": " << r.hi95 << ",\n";
+  js << "  \"n_bins_fit\": " << r.nbins << "\n";
+  js << "}\n";
+  js.close();
+
+  std::ofstream shiftcsv(od + "/shifted_data_vector_" + wc + "_m2.csv");
+  shiftcsv << "ibin,data,template0,template" << shift_ctg_value << ",shifted_data,applied_shift\n";
+  for (int i = 0; i < nb; ++i) {
+    const double applied = -(tmpl[shift_ctg_value][i] - tmpl[0][i]);
+    shiftcsv << i << "," << data[i] << "," << tmpl[0][i] << "," << tmpl[shift_ctg_value][i]
+             << "," << data_shifted[i] << "," << applied << "\n";
+  }
+  shiftcsv.close();
+
+  save_chi2_plot(od + "/deltaChi2_" + wc + "_data_shift_m2.pdf",
+                 od + "/deltaChi2_" + wc + "_data_shift_m2.png",
+                 xs, dchi, r, xscale, xlabel_override);
+
+  std::cout << "[FIT shifted data] " << tag << " " << wc
+            << " best=" << best
+            << " 68=[" << r.lo68 << "," << r.hi68 << "]"
+            << " 95=[" << r.lo95 << "," << r.hi95 << "]"
+            << " nbins=" << nb << std::endl;
+
+  return r;
+}
+
 void fit_2d_pair_grid(const std::string& wc1,
                       const std::string& wc2,
                       const std::vector<int>& obs,
@@ -944,7 +1204,15 @@ void fit_2d_pair_grid(const std::string& wc1,
   auto load_quad = [&](const std::string& wc, std::vector<double>& A, std::vector<double>& B, std::vector<double>& C, std::vector<double>& ref) {
     std::vector<int> vals = {-8,-4,-2,0,2,4,8};
     std::map<int, std::vector<double>> tmpl;
-    for (int v : vals) tmpl[v] = select_vec(load_values(make_template_path(eft_template_pattern, wc, v)), keep);
+    for (int v : vals) {
+      auto tmpl_full = load_values(make_template_path(eft_template_pattern, wc, v));
+      const int tmpl_nobs = infer_nobs_from_nbins((int)tmpl_full.size());
+      if (G_USE_DATA_OBS_MAP && tmpl_nobs >= 38) {
+        tmpl[v] = select_vec(tmpl_full, map_runtime_keep_to_data_keep(keep));
+      } else {
+        tmpl[v] = select_vec(tmpl_full, keep);
+      }
+    }
     ref = tmpl[0];
 
     const int nb = ref.size();
@@ -1088,7 +1356,7 @@ PubEntry pub_from_interval(const std::string& key, double lo, double hi) {
 std::vector<PubEntry> top22_wc_pub_entries() {
   // TOP-22-006, Table 5, profiled 1 sigma intervals.
   // Only direct same-basis/approximately same-name WCs from the current 16-WC list are included.
-  // The TOP-22-006 paper uses DIM6TOP-style names: ctG, c_tq^{1,8}, c_Qq^{11,18,31,38}.
+  // The TOP-22-006 paper uses Dim6Top-style names: ctG, c_tq^{1,8}, c_Qq^{11,18,31,38}.
   return {
     pub_from_interval("ctGRe", -0.15, 0.12),
     pub_from_interval("cQj18", -0.47, -0.00),
@@ -1243,7 +1511,7 @@ void fit_2d_pair_grid_if_available(const PairFitSpec& spec,
 //   - We turn the inclusive functional form
 //       (N0 + c N1 + c^2 N2)/(D0 + c D1 + c^2 D2)
 //     into a 6-bin toy/asymmetry template using the same A_FB convention
-//     as anom_chi2_fit_nanogen_integrated.py.
+//     as anom_chi2_fit_nanogen_ttbbllnunu_dim6top_test_integrated.py.
 // ============================================================
 
 struct HistChunk1D {
@@ -2477,19 +2745,18 @@ void save_individual_distribution_plot(const std::string& outpng,
     gr_ratio_theory_band.SetMarkerSize(0);
   }
 
-  hratio_data.Draw("E1");
+  hratio_data.GetYaxis()->SetTitle((std::string("MC/") + denomLabel).c_str());
+  hratio_data.Draw("AXIS");
   if (useTheoryDenom) gr_ratio_theory_band.Draw("2 same");
-  hratio_data.Draw("E1 same");
   hratio_mc.Draw("E1 same");
   TLine l(xedges.front(), 1.0, xedges.back(), 1.0); l.SetLineStyle(2); l.SetLineColor(kGray+2); l.Draw();
 
-  TLegend rleg(0.68, 0.70, 0.965, 0.92);
+  TLegend rleg(0.70, 0.76, 0.965, 0.92);
   rleg.SetBorderSize(0);
   rleg.SetFillStyle(0);
   rleg.SetTextFont(42);
   rleg.SetTextSize(0.074);
-  rleg.AddEntry(&hratio_data, (std::string("Data/") + denomLabel).c_str(), "lep");
-  rleg.AddEntry(&hratio_mc,   (std::string("MC/")   + denomLabel).c_str(), "lep");
+  rleg.AddEntry(&hratio_mc, (std::string("MC/") + denomLabel).c_str(), "lep");
   rleg.Draw();
 
   c.SaveAs(outpng.c_str());
@@ -2542,7 +2809,13 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
 
   const std::vector<int> vals = template_scan_values(eft_template_pattern);
   const int colors[] = {
-    kOrange+7, kAzure+7, kGreen+2, kBlack, kAzure-3, kOrange+1, kMagenta-4
+    kCyan+2,      // ctGRe=-8
+    kAzure+1,     // ctGRe=-4
+    kGreen+2,     // ctGRe=-2
+    kBlack,       // ctGRe=0
+    kBlue+1,      // ctGRe=+2
+    kViolet+6,    // ctGRe=+4, avoid any red/orange confusion with theory
+    kMagenta+2    // ctGRe=+8
   };
 
   std::map<int, TH1D*> hmc;
@@ -2570,9 +2843,20 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
         const double ed = data_e[i];
         const double n = mc_y[i];
         const double en = mc_e[i];
-        const double r = std::abs(d) > 0 ? n / d : 0.0;
+        double den = d;
+        double eden = ed;
+        if (theory) {
+          // For the concatenated inspection ratio, compare each MC template
+          // to the matching theory prediction at the same WC value.
+          const std::vector<double> ty_for_ratio = theory_full_values_for_wc_order(data_chunks, *theory, theory_order, wc, (double)v);
+          if (i < (int)ty_for_ratio.size()) {
+            den = ty_for_ratio[i];
+            eden = 0.0;
+          }
+        }
+        const double r = std::abs(den) > 0 ? n / den : 0.0;
         double er = 0.0;
-        if (std::abs(d) > 0) er = std::sqrt((en/d)*(en/d) + (n*ed/(d*d))*(n*ed/(d*d)));
+        if (std::abs(den) > 0) er = std::sqrt((en/den)*(en/den) + (n*eden/(den*den))*(n*eden/(den*den)));
         hr->SetBinContent(i + 1, r);
         hr->SetBinError(i + 1, er);
       }
@@ -2592,8 +2876,8 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
         TH1D* ht = new TH1D(Form("hthy_concat_%s_%s_%d", theory_order.c_str(), wc.c_str(), v), "", nbins, 0.0, (double)nbins);
         ht->SetDirectory(nullptr);
         for (int i = 0; i < nbins && i < (int)ty.size(); ++i) ht->SetBinContent(i + 1, ty[i]);
-        ht->SetLineColor(colors[iv]);
-        ht->SetLineWidth(4);
+        ht->SetLineColor(kRed+1);
+        ht->SetLineWidth(3);
         ht->SetLineStyle(2);
         hthy[v] = ht;
       }
@@ -2613,7 +2897,7 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
   p1.SetRightMargin(0.03);
   p1.SetTopMargin(0.08);
   p2.SetTopMargin(0.02);
-  p2.SetBottomMargin(0.36);
+  p2.SetBottomMargin(0.48);
   p2.SetLeftMargin(0.08);
   p2.SetRightMargin(0.03);
   p1.Draw();
@@ -2644,8 +2928,13 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
     l->Draw("same");
   }
 
-  // Draw theory last so the dashed Theory LO/NLO curves are on the top layer.
-  for (const auto& kv : hthy) kv.second->Draw("hist same");
+  // Draw only the SM theory reference (ctGRe=0) in the top concatenated panel.
+  // Drawing all theory curves in the same red dashed style made overlapping
+  // red segments look like an extra solid-red curve.
+  TH1D* hthy_ref = nullptr;
+  if (hthy.count(0)) hthy_ref = hthy[0];
+  else if (!hthy.empty()) hthy_ref = hthy.begin()->second;
+  if (hthy_ref) hthy_ref->Draw("hist same");
   hdata.Draw("E1 same");
 
   TLegend leg(0.66, 0.63, 0.94, 0.91);
@@ -2658,7 +2947,7 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
     if (hmc.count(v)) leg.AddEntry(hmc[v], Form("%s=%+d", wc.c_str(), v), "l");
   }
   leg.AddEntry(&hdata, "Data", "lep");
-  if (theory && !hthy.empty()) leg.AddEntry(hthy.begin()->second, ("Theory " + theory_order).c_str(), "l");
+  if (theory && hthy_ref) leg.AddEntry(hthy_ref, ("Theory " + theory_order).c_str(), "l");
   leg.Draw();
 
   TLatex lat;
@@ -2673,26 +2962,57 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
 
   p2.cd();
   TH1D frame_ratio("frame_ratio_concat", "", nbins, 0.0, (double)nbins);
-  frame_ratio.GetYaxis()->SetTitle(theory ? ("MC/Theory " + theory_order).c_str() : "MC/Data");
+  frame_ratio.GetYaxis()->SetTitle(theory ? ("Data, MC / Theory " + theory_order).c_str() : "MC/Data");
   frame_ratio.GetYaxis()->SetRangeUser(0.5, 1.5);
   frame_ratio.GetYaxis()->SetTitleSize(0.105);
   frame_ratio.GetYaxis()->SetTitleOffset(0.34);
   frame_ratio.GetYaxis()->SetLabelSize(0.075);
   frame_ratio.GetXaxis()->SetTitle("Observable");
   frame_ratio.GetXaxis()->SetTitleSize(0.105);
-  frame_ratio.GetXaxis()->SetLabelSize(0.060);
-  frame_ratio.GetXaxis()->SetTickLength(0.08);
-  for (int iobs = 0; iobs < (int)obs_names.size(); ++iobs) {
-    frame_ratio.GetXaxis()->SetBinLabel(iobs * BINS_PER_OBS + BINS_PER_OBS / 2 + 1,
-                                        obs_root_label(obs_names[iobs]).c_str());
-  }
-  frame_ratio.LabelsOption("v", "X");
+  frame_ratio.GetXaxis()->SetLabelSize(0.0);
+  frame_ratio.GetXaxis()->SetTickLength(0.0);
+  frame_ratio.GetXaxis()->SetNdivisions(0, false);
+
   frame_ratio.Draw("AXIS");
+
   TLine unity(0.0, 1.0, (double)nbins, 1.0);
   unity.SetLineStyle(2);
   unity.SetLineColor(kGray+2);
   unity.Draw("same");
   for (const auto& kv : hratio) kv.second->Draw("hist same");
+
+  TH1D hratio_data_concat("hratio_data_concat", "", nbins, 0.0, (double)nbins);
+  if (theory) {
+    // Draw data divided by the SM theory reference, ctGRe=0, so the black
+    // points in the ratio panel are unambiguous.
+    const std::vector<double> ty0 = theory_full_values_for_wc_order(data_chunks, *theory, theory_order, wc, 0.0);
+    for (int i = 0; i < nbins && i < (int)ty0.size(); ++i) {
+      const double den = ty0[i];
+      if (std::abs(den) > 1e-15) {
+        hratio_data_concat.SetBinContent(i + 1, data_y[i] / den);
+        hratio_data_concat.SetBinError(i + 1, data_e[i] / std::abs(den));
+      }
+    }
+    hratio_data_concat.SetMarkerStyle(20);
+    hratio_data_concat.SetMarkerSize(0.45);
+    hratio_data_concat.SetMarkerColor(kBlack);
+    hratio_data_concat.SetLineColor(kBlack);
+    hratio_data_concat.Draw("E1 same");
+  }
+
+  // TLegend leg_ratio_concat(0.70, 0.78, 0.93, 0.93);
+  // leg_ratio_concat.SetBorderSize(0);
+  // leg_ratio_concat.SetFillStyle(0);
+  // leg_ratio_concat.SetTextFont(42);
+  // leg_ratio_concat.SetTextSize(0.038);
+  // if (theory) leg_ratio_concat.AddEntry(&hratio_data_concat, ("Data/Theory " + theory_order).c_str(), "lep");
+  // if (!hratio.empty()) leg_ratio_concat.AddEntry(hratio.begin()->second, theory ? ("MC/Theory " + theory_order).c_str() : "MC/Data", "l");
+  // leg_ratio_concat.Draw();
+
+  // Draw observable-block boundaries and custom center ticks manually.
+  // ROOT bin labels attach only to integer bin centers, while each
+  // observable block center is iobs*6 + 3.  Manual TLatex labels avoid
+  // the half-bin visual shift and keep labels aligned with the 6-bin blocks.
   for (int iobs = 1; iobs < (int)obs_names.size(); ++iobs) {
     const double x = iobs * BINS_PER_OBS;
     TLine* l = new TLine(x, 0.5, x, 1.5);
@@ -2700,6 +3020,23 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
     l->SetLineStyle(3);
     l->SetLineWidth(1);
     l->Draw("same");
+  }
+  for (int iobs = 0; iobs < (int)obs_names.size(); ++iobs) {
+    const double xc = iobs * BINS_PER_OBS + 0.5 * BINS_PER_OBS;
+    TLine* tick = new TLine(xc, 0.5, xc, 0.54);
+    tick->SetLineColor(kBlack);
+    tick->SetLineWidth(1);
+    tick->Draw("same");
+  }
+
+  TLatex obs_lat;
+  obs_lat.SetTextFont(42);
+  obs_lat.SetTextSize(0.055);
+  obs_lat.SetTextAngle(62);
+  obs_lat.SetTextAlign(23);
+  for (int iobs = 0; iobs < (int)obs_names.size(); ++iobs) {
+    const double xc = iobs * BINS_PER_OBS + 0.5 * BINS_PER_OBS;
+    obs_lat.DrawLatex(xc, 0.425, obs_root_label(obs_names[iobs]).c_str());
   }
 
   const std::string suffix = theory ? ("_" + theory_order) : "";
@@ -3073,11 +3410,11 @@ void run_theory_fit_suite(const std::string& order,
   }
   const std::vector<PubEntry> top22_wc_pub = top22_wc_pub_entries();
   save_summary_plot(wc_summary,
-                    outdir + "/summary_SMEFTsim_WCs" + suffix + ".pdf",
-                    outdir + "/summary_SMEFTsim_WCs" + suffix + ".png",
+                    outdir + "/summary_Dim6Top_WCs" + suffix + ".pdf",
+                    outdir + "/summary_Dim6Top_WCs" + suffix + ".png",
                     "Wilson coefficient / #Lambda^{2} [TeV^{-2}]", -10.0, 10.0,
                     "Theory " + order + " Work in Progress", top22_wc_pub);
-  write_summary_csv(wc_summary, outdir + "/summary_SMEFTsim_WCs" + suffix + ".csv");
+  write_summary_csv(wc_summary, outdir + "/summary_Dim6Top_WCs" + suffix + ".csv");
 
   const double MT = 0.1725;
   const double GS = 1.1666;
@@ -3132,7 +3469,7 @@ void run_old22_ctg_parallel_suite(const std::string& outdir,
                                   int scan_n,
                                   const std::vector<int>& ctg_obs,
                                   bool have_theory) {
-  std::cout << "\n[INFO old22] running parallel ctG constraints: SMEFTsim MC, SMEFT theory LO, SMEFT theory NLO" << std::endl;
+  std::cout << "\n[INFO old22] running parallel ctG constraints: Dim6Top MC, shifted-data bias test, SMEFT theory LO, SMEFT theory NLO" << std::endl;
 
   const std::string od = outdir + "/parallel_ctG_old19";
   gSystem->mkdir(od.c_str(), true);
@@ -3145,14 +3482,27 @@ void run_old22_ctg_parallel_suite(const std::string& outdir,
   const double mu_scale = 2.0 * mt * mt;
 
   FitResult1D r_mc = fit_one_wc("ctGRe", ctg_obs,
-                                "parallel_ctG_old19/SMEFTsim_MC", outdir,
+                                "parallel_ctG_old19/Dim6Top_MC", outdir,
                                 data_root, eft_template_pattern, cov_full,
                                 drop_bin_idx, scan_min, scan_max, scan_n,
                                 1.0, "c_{tG}^{Re} / #Lambda^{2} [TeV^{-2}]");
-  r_mc.name = "ctGRe_SMEFTsim_MC";
+  r_mc.name = "ctGRe_Dim6Top_MC";
   raw_results.push_back(r_mc);
-  ctg_summary.push_back(make_summary_entry("SMEFTsim_MC", "SMEFTsim MC", r_mc, 1.0));
-  mut_summary.push_back(make_summary_entry("SMEFTsim_MC", "SMEFTsim MC", r_mc, mu_scale));
+  ctg_summary.push_back(make_summary_entry("Dim6Top_MC", "Dim6Top MC", r_mc, 1.0));
+  mut_summary.push_back(make_summary_entry("Dim6Top_MC", "Dim6Top MC", r_mc, mu_scale));
+
+  // Bias diagnostic: remove the observed ctGRe=-2 template deformation from data and refit.
+  // Output is intentionally placed as another directory under parallel_ctG_old19.
+  FitResult1D r_mc_shift = fit_one_wc_shifted_data("ctGRe", ctg_obs,
+                                "parallel_ctG_old19/Dim6Top_MC_data_minus_ctGRe_m2_deformation", outdir,
+                                data_root, eft_template_pattern, cov_full,
+                                drop_bin_idx, scan_min, scan_max, scan_n,
+                                -2,
+                                1.0, "c_{tG}^{Re} / #Lambda^{2} [TeV^{-2}]");
+  r_mc_shift.name = "ctGRe_Dim6Top_MC_data_shifted_from_m2";
+  raw_results.push_back(r_mc_shift);
+  ctg_summary.push_back(make_summary_entry("Dim6Top_MC_shifted_m2", "Dim6Top MC, data - #DeltaT(-2)", r_mc_shift, 1.0));
+  mut_summary.push_back(make_summary_entry("Dim6Top_MC_shifted_m2", "Dim6Top MC, data - #DeltaT(-2)", r_mc_shift, mu_scale));
 
   if (have_theory) {
     FitResult1D r_lo = fit_one_wc_theory("ctGRe", ctg_obs,
@@ -3179,7 +3529,7 @@ void run_old22_ctg_parallel_suite(const std::string& outdir,
   save_summary_plot(ctg_summary,
                     od + "/summary_ctG_parallel.pdf",
                     od + "/summary_ctG_parallel.png",
-                    "c_{tG}^{Re} / #Lambda^{2} [TeV^{-2}]", -1.0, 1.0,
+                    "c_{tG}^{Re} / #Lambda^{2} [TeV^{-2}]", -3.0, 3.0,
                     "Simulation Work in Progress");
   save_summary_plot(mut_summary,
                     od + "/summary_mu_t_parallel.pdf",
@@ -3212,10 +3562,10 @@ int main() {
   //   NLO_CTG_MODE=old22 ./execMacro.sh ...       # force old/preUL 22-observable mode
   //   DATA_ROOT=... EFT_PATTERN=... COV_STAT=... COV_SYST=... OUTDIR=...
   std::string data_root = getenv_str("DATA_ROOT",
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen/concatenated_histograms_data.root");
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_data.root");
 
   std::string eft_template_pattern = getenv_str("EFT_PATTERN",
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen/concatenated_histograms_{wc}_{val}.root");
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_{wc}_{val}.root");
 
   std::string cov_stat = getenv_str("COV_STAT",
     "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/stat_gigantic_matrix_fullRun2.root");
@@ -3223,58 +3573,97 @@ int main() {
   std::string cov_syst = getenv_str("COV_SYST",
     "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/syst_gigantic_matrix_fullRun2.root");
 
-  // Old/preUL fallback copied from convert_csv_root.html for ctG templates,
-  // but use the NanoGEN 38-observable data ROOT by default and map old19 -> new38.
-  //   data: /depot/.../histogram_output_nanogen/concatenated_histograms_data.root
-  //   MC:   nlo_ctG_root_density/nlo_ctG_{m2,p0,p2}_nominal_toppt_default_shape_concatenated.root
-  //   cov:  fullRun2 gigantic stat+syst matrices, sliced by old19 -> new38 observable map
-  const bool old22_files_available =
-    file_exists_root("nlo_ctG_root_density/nlo_ctG_p0_nominal_toppt_default_shape_concatenated.root");
-  const std::string mode = getenv_str("NLO_CTG_MODE", "auto");
-  const bool force_old22 = (mode == "old22" || mode == "OLD22" || mode == "preUL");
-  const bool force_new38 = (mode == "new38" || mode == "NEW38" || mode == "nanogen");
-  if (force_old22 || (!force_new38 && !file_exists_root(make_template_path(eft_template_pattern, "ctGRe", 0)) && old22_files_available)) {
-    std::cout << "[INFO mode] using old/preUL ctG-template fallback with NanoGEN data" << std::endl;
-    data_root = getenv_str("DATA_ROOT",
-      "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen/concatenated_histograms_data.root");
-    eft_template_pattern = getenv_str("EFT_PATTERN", "nlo_ctG_root_density/nlo_ctG_{oldval}_nominal_toppt_default_shape_concatenated.root");
-    // Keep the full Run-2 gigantic covariance by default in old22 mode.
-    // Override with COV_STAT/COV_SYST only if explicitly needed.
-    cov_stat = getenv_str("COV_STAT", cov_stat);
-    cov_syst = getenv_str("COV_SYST", cov_syst);
+  // --------------------------------------------------------------------------
+  // Explicit ctG/template modes.
+  //
+  //   old22_preUL : old preUL/nlo_ctG_root_density templates, old first-19
+  //                 observable basis, mapped onto the full Run-2 UL data/cov.
+  //   old22_UL    : UL NanoGEN/dim6top templates, but still fit only the old
+  //                 first-19 observable basis mapped as 0..12,15..20.
+  //   new38_UL    : UL NanoGEN/dim6top templates in the full NanoGEN order,
+  //                 using new38 observables except the last 3 lab observables.
+  //
+  // Legacy aliases are kept:
+  //   old22, preUL -> old22_preUL
+  //   new38, nanogen -> new38_UL
+  // --------------------------------------------------------------------------
+  const std::string mode_raw = getenv_str("NLO_CTG_MODE", "new38_UL");
+  std::string mode = mode_raw;
+  std::transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
+
+  const bool mode_old22_preUL = (mode == "old22_preul" || mode == "old22_pre-ul" ||
+                                mode == "old22" || mode == "preul");
+  const bool mode_old22_UL    = (mode == "old22_ul" || mode == "old22ul");
+  const bool mode_new38_UL    = (mode == "new38_ul" || mode == "new38ul" ||
+                                mode == "new38" || mode == "nanogen");
+
+  if (!mode_old22_preUL && !mode_old22_UL && !mode_new38_UL) {
+    std::stringstream ss;
+    ss << "Unknown NLO_CTG_MODE='" << mode_raw
+       << "'. Use one of: old22_preUL, old22_UL, new38_UL";
+    throw std::runtime_error(ss.str());
   }
 
-  // Infer the number of observables from the data histogram. New NanoGEN: 38*6=228; old/preUL: 22*6=132.
+  const bool use_old19_basis = (mode_old22_preUL || mode_old22_UL);
+
+  const std::string ul_dim6top_pattern =
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_{wc}_{val}.root";
+  const std::string preul_ctg_pattern =
+    "nlo_ctG_root_density/nlo_ctG_{oldval}_nominal_toppt_default_shape_concatenated.root";
+
+  // Important: mode selects the intended template family.  This avoids a stale
+  // EFT_PATTERN environment variable making new38_UL accidentally read 132-bin
+  // old/preUL templates, which causes vector::_M_range_check failures.
+  if (mode_old22_preUL) {
+    eft_template_pattern = preul_ctg_pattern;
+  } else {
+    eft_template_pattern = ul_dim6top_pattern;
+  }
+
+  // Optional explicit override for debugging only.  Use EFT_PATTERN_FORCE rather
+  // than EFT_PATTERN so old shell exports cannot silently break the selected mode.
+  eft_template_pattern = getenv_str("EFT_PATTERN_FORCE", eft_template_pattern);
+
+  data_root = getenv_str("DATA_ROOT", data_root);
+  cov_stat  = getenv_str("COV_STAT", cov_stat);
+  cov_syst  = getenv_str("COV_SYST", cov_syst);
+
   const int inferred_nobs_from_data = infer_nobs_from_nbins((int)load_values(data_root).size());
-  G_N_OBS_TOTAL = inferred_nobs_from_data;
-  if (force_old22 || (!force_new38 && old22_files_available)) {
-    std::cout << "[INFO mode] old/preUL input has " << inferred_nobs_from_data
-              << " observables, but fitting only first 19; excluding last 3 lab observables" << std::endl;
+
+  if (use_old19_basis) {
+    std::cout << "[INFO mode] " << mode_raw
+              << ": old22 basis, fitting only the first 19 old/preUL observables" << std::endl;
     G_N_OBS_TOTAL = 19;
     G_USE_COV_OBS_MAP = true;
     G_USE_DATA_OBS_MAP = true;
-    // Old/preUL first-19 observable order:
-    //   b1k,b2k,b1r,b2r,b1n,b2n,b1j,b2j,b1q,b2q,
-    //   ckk,crr,cnn,Crk+,Crk-,Cnr+,Cnr-,Cnk+,Cnk-
-    // Corresponding indices in the actual 38-observable NanoGEN/full-Run2 order:
-    //   0..12 are the same, then skip gen_c_kj/gen_c_rq at indices 13/14,
-    //   and take gen_c_Prk,gen_c_Mrk,gen_c_Pnr,gen_c_Mnr,gen_c_Pnk,gen_c_Mnk
-    //   at indices 15..20.
     G_COV_OBS_MAP  = {0,1,2,3,4,5,6,7,8,9,10,11,12,15,16,17,18,19,20};
     G_DATA_OBS_MAP = G_COV_OBS_MAP;
   } else {
+    std::cout << "[INFO mode] " << mode_raw
+              << ": new38 UL basis, excluding the last 3 lab observables" << std::endl;
+    // Full new38 order has 38 observables.  The active fit keeps indices 0..34:
+    // all spin/anomalous observables through gen_ll_cHel, and excludes the last
+    // three lab observables gen_ll_cLab, gen_llbar_delta_phi, gen_llbar_delta_eta.
+    if (inferred_nobs_from_data < 38) {
+      std::stringstream ss;
+      ss << "new38_UL requires a 38-observable data vector, but data_root has "
+         << inferred_nobs_from_data << " observables: " << data_root;
+      throw std::runtime_error(ss.str());
+    }
+    G_N_OBS_TOTAL = 35;
     G_USE_COV_OBS_MAP = false;
     G_USE_DATA_OBS_MAP = false;
     G_COV_OBS_MAP.clear();
     G_DATA_OBS_MAP.clear();
   }
+
   if (G_USE_COV_OBS_MAP) {
     std::cout << "[INFO mode] old19 -> fullRun2 covariance observable map:";
     for (int x : G_COV_OBS_MAP) std::cout << " " << x;
     std::cout << std::endl;
   }
   if (G_USE_DATA_OBS_MAP) {
-    std::cout << "[INFO mode] old19 -> NanoGEN data observable map:";
+    std::cout << "[INFO mode] old19 -> NanoGEN data/template observable map:";
     for (int x : G_DATA_OBS_MAP) std::cout << " " << x;
     std::cout << std::endl;
   }
@@ -3289,7 +3678,7 @@ int main() {
   const int scan_n = 10000;
   const int scan2d_n = 121;
 
-  const std::string outdir = getenv_str("OUTDIR", ((force_old22 || (!force_new38 && old22_files_available)) ? "nanogen_fits_root_old22_ctG_first19" : "nanogen_fits_root"));
+  const std::string outdir = getenv_str("OUTDIR", (use_old19_basis ? (mode_old22_preUL ? "preUL_ctG_old22_preUL" : "preUL_ctG_old22_UL") : "preUL_ctG_new38_UL"));
   gSystem->mkdir(outdir.c_str(), true);
 
   TheoryTable theory_table = load_embedded_theory_csv();
@@ -3313,9 +3702,9 @@ int main() {
     "ctu1", "ctu8", "ctd1", "ctd8",
     "ctj1", "ctj8"
   };
-  if (force_old22 || (!force_new38 && old22_files_available && G_N_OBS_TOTAL == 19)) {
+  if (mode_old22_preUL) {
     wc_list = {"ctGRe"};
-    std::cout << "[INFO mode] old22 fallback fits only ctGRe, matching the old ctG-only MC templates" << std::endl;
+    std::cout << "[INFO mode] old22_preUL fits only ctGRe, matching the old ctG-only MC templates" << std::endl;
   }
 
   // Observable index convention follows your 0..37 screenshot and NanoGEN concatenation.
@@ -3328,13 +3717,13 @@ int main() {
   const int OBS_csca = 25, OBS_cHel = 34;
 
   std::map<std::string, std::vector<int>> obs_sets;
-  if (G_N_OBS_TOTAL >= 36) {
+  if (G_N_OBS_TOTAL >= 35) {
     obs_sets["AN22_028_Fig16_mu_t_1D"] = {OBS_cHel, OBS_csca, OBS_b1k, OBS_ckk};
     obs_sets["AN22_028_Fig18_mu_t_vs_d_t"] = {OBS_cHel, OBS_csca, OBS_cnrM, OBS_cnkM};
     obs_sets["AN22_028_Fig18_mu_t_vs_cVV"] = {OBS_cHel, OBS_csca, OBS_ckk, OBS_b1r};
     obs_sets["AN22_028_Fig18_d_t_vs_cMinusMinus"] = {OBS_cnrM, OBS_cnkM, OBS_b1n, OBS_b1k};
     obs_sets["AN22_028_Fig18_cVV_vs_c1"] = {OBS_cHel, OBS_cnn, OBS_ckk, OBS_b1r};
-    obs_sets["all_0_35"] = range_obs(0, 35);
+    obs_sets["all_0_35"] = range_obs(0, 34);
   } else {
     // Old/preUL 22-observable layout from convert_csv_root.html: block_structure=np.arange(132).reshape(-1,6).
     // The notebook used selected_observables=[9,11,12,18] for the compact ctG constraint,
@@ -3361,7 +3750,7 @@ int main() {
                                 mu_scale, "#hat{#mu}_{t}");
   results.push_back(r_mu); result_by_key["mu_t"] = r_mu;
 
-  if (G_N_OBS_TOTAL >= 36) {
+  if (G_N_OBS_TOTAL >= 35) {
     FitResult1D r_dt = fit_one_wc("ctGIm", obs_sets["AN22_028_Fig18_mu_t_vs_d_t"],
                                   "AN22_028_d_t_CPodd_1D", outdir,
                                   data_root, eft_template_pattern, cov_full,
@@ -3372,7 +3761,7 @@ int main() {
 
   // --- Fig.16 per-WC observable fits ---
   std::map<std::string, std::vector<int>> FIG16_OBS;
-  if (G_N_OBS_TOTAL >= 36) {
+  if (G_N_OBS_TOTAL >= 35) {
     FIG16_OBS = {
       {"ctGRe", {OBS_cHel, OBS_csca, OBS_b1k, OBS_ckk}},
       {"ctGIm", {OBS_cnrM, OBS_cnkM, OBS_b1n, OBS_b1k}},
@@ -3404,10 +3793,10 @@ int main() {
     if (result_by_key.count(wc)) wc_summary.push_back(make_summary_entry(wc, pretty_label(wc), result_by_key[wc], 1.0));
   }
   const std::vector<PubEntry> top22_wc_pub = top22_wc_pub_entries();
-  save_summary_plot(wc_summary, outdir + "/summary_SMEFTsim_WCs.pdf", outdir + "/summary_SMEFTsim_WCs.png",
+  save_summary_plot(wc_summary, outdir + "/summary_Dim6Top_WCs.pdf", outdir + "/summary_Dim6Top_WCs.png",
                     "Wilson coefficient / #Lambda^{2} [TeV^{-2}]", -10.0, 10.0,
                     "Simulation Work in Progress", top22_wc_pub);
-  write_summary_csv(wc_summary, outdir + "/summary_SMEFTsim_WCs.csv");
+  write_summary_csv(wc_summary, outdir + "/summary_Dim6Top_WCs.csv");
   std::vector<SummaryEntry> anom_summary;
 
 
@@ -3463,7 +3852,7 @@ int main() {
   write_summary_csv(anom_summary, outdir + "/summary_anomalous_couplings.csv");
 
 
-  if (force_old22 || (!force_new38 && old22_files_available && G_N_OBS_TOTAL == 19)) {
+  if (use_old19_basis) {
     run_old22_ctg_parallel_suite(outdir, data_root, eft_template_pattern,
                                  theory_table, cov_full, drop_bin_idx,
                                  scan_min, scan_max, scan_n,
@@ -3482,15 +3871,15 @@ int main() {
     {"ctGIm", "ctj8", "AN22_028_Fig18_ctGIm_vs_ctj8_cMinusMinus_proxy", obs_sets["AN22_028_Fig18_d_t_vs_cMinusMinus"], -8.0, 8.0},
     {"cQj18", "cQj38", "AN22_028_Fig18_cQj18_cVV_proxy_vs_cQj38_c1_proxy", obs_sets["AN22_028_Fig18_cVV_vs_c1"], -8.0, 8.0}
   };
-  if (G_N_OBS_TOTAL >= 36) {
+  if (G_N_OBS_TOTAL >= 35) {
     for (const auto& spec : fig18_pairs) {
       fit_2d_pair_grid_if_available(spec, outdir, data_root, eft_template_pattern, cov_full, drop_bin_idx, scan2d_n);
     }
   } else {
-    std::cout << "[INFO mode] skip 2D proxy fits in old22 fallback; only ctGRe 1D constraint is meaningful for the old ctG-only MC." << std::endl;
+    std::cout << "[INFO mode] skip 2D proxy fits in old22 basis; only the 1D old-basis constraint is run here." << std::endl;
   }
 
-  if (have_theory && G_N_OBS_TOTAL >= 36) {
+  if (have_theory && G_N_OBS_TOTAL >= 35) {
     run_theory_fit_suite("LO", "_theory_lo", outdir, data_root, theory_table, cov_full,
                          drop_bin_idx, scan_min, scan_max, scan_n, scan2d_n,
                          wc_list, obs_sets, FIG16_OBS, fig18_pairs);
