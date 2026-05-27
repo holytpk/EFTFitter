@@ -1,4 +1,4 @@
-// Run command: NLO_CTG_MODE=old22 OUTDIR=UL_EFTMC_old19 DATA_ROOT=/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_data.root EFT_PATTERN=/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_{wc}_{val}.root COV_STAT=/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/stat_gigantic_matrix_fullRun2.root COV_SYST=/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/syst_gigantic_matrix_fullRun2.root ./execMacro.sh nlo_ctG_evo_preUL_compare_-8to8.cc
+// Run command: NLO_CTG_MODE=old22 OUTDIR=UL_EFTMC_old19 DATA_ROOT=/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_Alex_test/concatenated_histograms_data.root EFT_PATTERN=/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_Alex_test/concatenated_histograms_{wc}_{val}.root COV_STAT=/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/stat_gigantic_matrix_fullRun2.root COV_SYST=/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/syst_gigantic_matrix_fullRun2.root ./execMacro.sh nlo_ctG_evo_preUL_compare_-8to8.cc
 
 // -----------------------------------------------------------------------------
 // Example: how the per-bin theory histogram is constructed for gen_c_kk
@@ -130,6 +130,7 @@
 #include <vector>
 #include <iomanip>
 #include <cstdlib>
+#include <cctype>
 #include <cstdio>
 #include <memory>
 
@@ -1511,12 +1512,15 @@ void fit_2d_pair_grid_if_available(const PairFitSpec& spec,
 //   - We turn the inclusive functional form
 //       (N0 + c N1 + c^2 N2)/(D0 + c D1 + c^2 D2)
 //     into a 6-bin toy/asymmetry template using the same A_FB convention
-//     as anom_chi2_fit_nanogen_ttbbllnunu_dim6top_test_integrated.py.
+//     as anom_chi2_fit_nanogen_ttbbllnunu_Alex_test_integrated.py.
 // ============================================================
 
 struct HistChunk1D {
   std::vector<double> y;
   std::vector<double> e;
+  // Original 6-bin index for each stored bin. Used to correctly handle
+  // reduced concatenated templates, e.g. 190 bins = 38 observables x 5 bins.
+  std::vector<int> bin_idx;
 };
 
 struct CoeffSummary {
@@ -2291,6 +2295,29 @@ double asymmetry_factor(const std::string& obs) {
   return 0.0;
 }
 
+
+// Forward declarations/helpers for reduced-bin chunk plotting.
+std::vector<double> obs_axis_edges(const std::string& obs);
+static const int G_CHUNK_DROP_BIN_IDX = 1;
+
+std::vector<int> full_bin_indices_for_chunk(const HistChunk1D& c) {
+  if (!c.bin_idx.empty() && c.bin_idx.size() == c.y.size()) return c.bin_idx;
+  std::vector<int> idx(c.y.size());
+  for (int i = 0; i < (int)c.y.size(); ++i) idx[i] = i;
+  return idx;
+}
+
+std::vector<double> obs_axis_edges_for_chunk(const std::string& obs, const HistChunk1D& c) {
+  std::vector<double> full = obs_axis_edges(obs);
+  const int n = (int)c.y.size();
+  if (n == BINS_PER_OBS || c.bin_idx.empty() || (int)c.bin_idx.size() != n) return full;
+  std::vector<double> edges;
+  edges.reserve(n + 1);
+  edges.push_back(full.at(c.bin_idx.front()));
+  for (int ib : c.bin_idx) edges.push_back(full.at(ib + 1));
+  return edges;
+}
+
 std::map<std::string, HistChunk1D> split_values_into_chunks(const std::vector<double>& vals) {
   // Fallback helper for code paths that only have bin contents.
   // Do NOT assign sqrt(content) errors for normalized differential spectra:
@@ -2306,6 +2333,7 @@ std::map<std::string, HistChunk1D> split_values_into_chunks(const std::vector<do
       const double y = vals[iobs * BINS_PER_OBS + ib];
       c.y.push_back(y);
       c.e.push_back(0.0);
+      c.bin_idx.push_back(ib);
     }
     out[names[iobs]] = c;
   }
@@ -2320,16 +2348,34 @@ std::map<std::string, HistChunk1D> load_hist_chunks_from_root(const std::string&
   if (!h) throw std::runtime_error("No TH1 found in " + path);
 
   std::map<std::string, HistChunk1D> out;
-  const int nobs_in = h->GetNbinsX() / BINS_PER_OBS;
+  const int nb = h->GetNbinsX();
+  int bins_per_obs_in_file = BINS_PER_OBS;
+
+  if (nb % BINS_PER_OBS == 0) {
+    bins_per_obs_in_file = BINS_PER_OBS;
+  } else if (nb % (BINS_PER_OBS - 1) == 0) {
+    bins_per_obs_in_file = BINS_PER_OBS - 1;
+    std::cout << "[INFO chunks] " << path << " has " << nb
+              << " bins; using reduced 5-bin-per-observable layout."
+              << " This prevents accidental 6-bin regrouping of 190-bin files." << std::endl;
+  } else {
+    throw std::runtime_error(Form("Cannot split %s: nbins=%d is neither divisible by 6 nor 5", path.c_str(), nb));
+  }
+
+  const int nobs_in = nb / bins_per_obs_in_file;
   const auto names = (G_USE_DATA_OBS_MAP && nobs_in <= 22) ? old22_observable_names() : observable_names();
   const int nobs = std::min((int)names.size(), nobs_in);
 
   for (int iobs = 0; iobs < nobs; ++iobs) {
     HistChunk1D c;
+    int local = 0;
     for (int ib = 0; ib < BINS_PER_OBS; ++ib) {
-      const int gbin = iobs * BINS_PER_OBS + ib + 1;
+      if (bins_per_obs_in_file == BINS_PER_OBS - 1 && ib == G_CHUNK_DROP_BIN_IDX) continue;
+      const int gbin = iobs * bins_per_obs_in_file + local + 1;
       c.y.push_back(h->GetBinContent(gbin));
       c.e.push_back(std::max(0.0, h->GetBinError(gbin)));
+      c.bin_idx.push_back(ib);
+      ++local;
     }
     out[names[iobs]] = c;
   }
@@ -2339,10 +2385,14 @@ std::map<std::string, HistChunk1D> load_hist_chunks_from_root(const std::string&
 CoeffSummary coefficient_from_chunk(const std::string& obs, const HistChunk1D& c) {
   CoeffSummary s;
   const double f = asymmetry_factor(obs);
-  if (f == 0.0 || c.y.size() != BINS_PER_OBS) return s;
+  if (f == 0.0 || c.y.empty()) return s;
+  const std::vector<int> idx = full_bin_indices_for_chunk(c);
   double F = 0.0, B = 0.0, vF = 0.0, vB = 0.0;
-  for (int i = 0; i < BINS_PER_OBS / 2; ++i) { B += c.y[i]; vB += c.e[i] * c.e[i]; }
-  for (int i = BINS_PER_OBS / 2; i < BINS_PER_OBS; ++i) { F += c.y[i]; vF += c.e[i] * c.e[i]; }
+  for (int i = 0; i < (int)c.y.size(); ++i) {
+    const bool is_backward = idx[i] < BINS_PER_OBS / 2;
+    if (is_backward) { B += c.y[i]; vB += c.e[i] * c.e[i]; }
+    else             { F += c.y[i]; vF += c.e[i] * c.e[i]; }
+  }
   if (std::abs(F + B) < 1e-15) return s;
   s.afb = (F - B) / (F + B);
   s.afb_err = (2.0 / ((F + B) * (F + B))) * std::sqrt(std::max(0.0, B * B * vF + F * F * vB));
@@ -2491,16 +2541,20 @@ double theory_value_error(const TheoryTable& tab, const std::string& order, cons
 
 HistChunk1D theory_asymmetry_hist_from_reference(const HistChunk1D& ref, const std::string& obs, double coeff) {
   // The theory table gives inclusive spin-correlation numerators. It has no
-  // 6-bin shape information. To sync with NanoGEN/data, keep the reference
-  // 6-bin intra-half shape and only rescale the backward/forward halves so
-  // that the resulting histogram has the requested A_FB.
+  // detailed differential shape. Keep the reference intra-half shape and only
+  // rescale backward/forward halves so the requested asymmetry is reproduced.
+  // Works for both full 6-bin chunks and reduced 5-bin chunks.
   HistChunk1D out;
-  out.y.assign(BINS_PER_OBS, 0.0);
-  out.e.assign(BINS_PER_OBS, 0.0);
+  const int n = (int)ref.y.size();
+  out.y.assign(n, 0.0);
+  out.e.assign(n, 0.0);
+  out.bin_idx = full_bin_indices_for_chunk(ref);
 
   double bsum = 0.0, fsum = 0.0;
-  for (int i = 0; i < BINS_PER_OBS / 2; ++i) bsum += ref.y[i];
-  for (int i = BINS_PER_OBS / 2; i < BINS_PER_OBS; ++i) fsum += ref.y[i];
+  for (int i = 0; i < n; ++i) {
+    if (out.bin_idx[i] < BINS_PER_OBS / 2) bsum += ref.y[i];
+    else                                  fsum += ref.y[i];
+  }
   double total = bsum + fsum;
   if (std::abs(total) < 1e-15) total = 1.0;
 
@@ -2511,18 +2565,13 @@ HistChunk1D theory_asymmetry_hist_from_reference(const HistChunk1D& ref, const s
   const double target_b = 0.5 * total * (1.0 - afb);
   const double target_f = 0.5 * total * (1.0 + afb);
 
-  if (std::abs(bsum) > 1e-15) {
-    for (int i = 0; i < BINS_PER_OBS / 2; ++i) out.y[i] = ref.y[i] * target_b / bsum;
-  } else {
-    for (int i = 0; i < BINS_PER_OBS / 2; ++i) out.y[i] = target_b / (BINS_PER_OBS / 2);
+  int nb = 0, nf = 0;
+  for (int ib : out.bin_idx) { if (ib < BINS_PER_OBS / 2) ++nb; else ++nf; }
+  for (int i = 0; i < n; ++i) {
+    const bool is_backward = out.bin_idx[i] < BINS_PER_OBS / 2;
+    if (is_backward) out.y[i] = (std::abs(bsum) > 1e-15) ? ref.y[i] * target_b / bsum : target_b / std::max(1, nb);
+    else             out.y[i] = (std::abs(fsum) > 1e-15) ? ref.y[i] * target_f / fsum : target_f / std::max(1, nf);
   }
-
-  if (std::abs(fsum) > 1e-15) {
-    for (int i = BINS_PER_OBS / 2; i < BINS_PER_OBS; ++i) out.y[i] = ref.y[i] * target_f / fsum;
-  } else {
-    for (int i = BINS_PER_OBS / 2; i < BINS_PER_OBS; ++i) out.y[i] = target_f / (BINS_PER_OBS / 2);
-  }
-
   return out;
 }
 
@@ -3048,6 +3097,294 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
   std::cout << "[SAVED] " << png << std::endl;
 }
 
+
+
+// ============================================================
+// Side-by-side old/preUL vs ttbbllnunu_Alex_test comparison
+//   Left : preUL Dim6Top template vs SMEFT theory LO, with MC error bars,
+//          theory uncertainty band, and MC/Theory ratio.
+//   Right: ttbbllnunu_Alex_test template vs the same SMEFT theory LO construction.
+//
+// This is intentionally separate from save_individual_distribution_plot(), because
+// that function is data-vs-template oriented.  Here both sides are MC/theory checks.
+// Defaults are ctGRe = {-2, 0, +2}, matching the available old/preUL ctG templates.
+// Override with:
+//   COMPARE_WC=ctGRe COMPARE_VALS="-2,0,2" MAKE_ALEX_PREUL_COMPARE=1
+// ============================================================
+std::vector<int> parse_compare_vals_env(const std::string& env_name, const std::vector<int>& def) {
+  const char* raw = std::getenv(env_name.c_str());
+  if (!raw || std::string(raw).empty()) return def;
+  std::vector<int> out;
+  std::stringstream ss(raw);
+  std::string tok;
+  while (std::getline(ss, tok, ',')) {
+    if (tok.empty()) continue;
+    try { out.push_back(std::stoi(tok)); } catch (...) {}
+  }
+  return out.empty() ? def : out;
+}
+
+bool getenv_bool_local(const std::string& key, bool def=false) {
+  const char* v = std::getenv(key.c_str());
+  if (!v) return def;
+  std::string s(v);
+  std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+  return (s == "1" || s == "true" || s == "yes" || s == "on");
+}
+
+void draw_mc_vs_theory_halfpad(TPad* parent,
+                               const std::string& unique,
+                               const std::string& obs,
+                               const HistChunk1D& mc,
+                               const HistChunk1D* theory,
+                               const std::string& panel_title,
+                               const std::string& sample_label,
+                               double theory_coeff_err_override = -1.0) {
+  parent->cd();
+  parent->SetFillStyle(4000);
+
+  TPad* top = new TPad(("top_" + unique).c_str(), ("top_" + unique).c_str(), 0.0, 0.30, 1.0, 1.0);
+  TPad* bot = new TPad(("bot_" + unique).c_str(), ("bot_" + unique).c_str(), 0.0, 0.0, 1.0, 0.30);
+  top->SetBottomMargin(0.035); top->SetLeftMargin(0.14); top->SetRightMargin(0.04); top->SetTopMargin(0.10);
+  bot->SetTopMargin(0.04); bot->SetBottomMargin(0.34); bot->SetLeftMargin(0.14); bot->SetRightMargin(0.04);
+  top->Draw(); bot->Draw();
+
+  const int nb = (int)mc.y.size();
+  std::vector<double> xedges = obs_axis_edges_for_chunk(obs, mc);
+  TH1D* hmc = new TH1D(("hmc_" + unique).c_str(), "", nb, xedges.data());
+  TH1D* hthy = new TH1D(("hthy_" + unique).c_str(), "", nb, xedges.data());
+  TH1D* hthy_band = new TH1D(("hthy_band_" + unique).c_str(), "", nb, xedges.data());
+
+  for (int i = 0; i < nb; ++i) {
+    hmc->SetBinContent(i+1, mc.y[i]);
+    hmc->SetBinError(i+1, mc.e[i]);
+    if (theory) {
+      hthy->SetBinContent(i+1, theory->y[i]);
+      hthy->SetBinError(i+1, theory->e[i]);
+    }
+  }
+
+  const int blue = TColor::GetColor("#0072B2");
+  const int red  = TColor::GetColor("#D62728");
+  hmc->SetMarkerStyle(20); hmc->SetMarkerSize(0.95); hmc->SetMarkerColor(blue); hmc->SetLineColor(blue); hmc->SetLineWidth(2);
+  hthy->SetLineColor(red); hthy->SetLineWidth(3); hthy->SetLineStyle(2);
+  hthy_band->SetFillColorAlpha(red, 0.30); hthy_band->SetFillStyle(1001); hthy_band->SetLineColor(red); hthy_band->SetLineWidth(0);
+
+  if (theory) {
+    const CoeffSummary ct_for_band = coefficient_from_chunk(obs, *theory);
+    const double coeff_band_err = (theory_coeff_err_override >= 0.0)
+                                  ? theory_coeff_err_override
+                                  : (ct_for_band.ok ? ct_for_band.coeff_err : 0.0);
+    HistChunk1D thy_up = theory_asymmetry_hist_from_reference(mc, obs, ct_for_band.coeff + coeff_band_err);
+    HistChunk1D thy_dn = theory_asymmetry_hist_from_reference(mc, obs, ct_for_band.coeff - coeff_band_err);
+    for (int i = 0; i < nb; ++i) {
+      const double y0 = theory->y[i];
+      const double eup = std::abs(thy_up.y[i] - y0);
+      const double edn = std::abs(y0 - thy_dn.y[i]);
+      hthy_band->SetBinContent(i+1, y0);
+      hthy_band->SetBinError(i+1, std::max(eup, edn));
+    }
+  }
+
+  top->cd();
+  double ymax = 0.0;
+  for (int i=1; i<=nb; ++i) {
+    ymax = std::max(ymax, hmc->GetBinContent(i) + hmc->GetBinError(i));
+    if (theory) ymax = std::max(ymax, hthy->GetBinContent(i) + hthy_band->GetBinError(i));
+  }
+  hmc->SetMinimum(0.0);
+  hmc->SetMaximum(1.65 * std::max(1e-9, ymax));
+  hmc->GetYaxis()->SetTitle("normalized diff. xsec");
+  hmc->GetYaxis()->SetTitleSize(0.055); hmc->GetYaxis()->SetLabelSize(0.045);
+  hmc->GetXaxis()->SetLabelSize(0.0);
+  // Draw MC as a step histogram first, then overlay error-bar markers.
+  // This keeps the right Alex panel visually identical to the left preUL panel.
+  hmc->Draw("hist");
+
+  TGraphAsymmErrors* gr_band = nullptr;
+  if (theory) {
+    gr_band = new TGraphAsymmErrors(make_theory_band_graph(*hthy, *hthy_band, "gr_band_" + unique));
+    gr_band->SetFillColorAlpha(red, 0.30);
+    gr_band->SetFillStyle(1001);
+    gr_band->SetLineColor(red);
+    gr_band->SetLineWidth(0);
+    gr_band->SetMarkerSize(0);
+    gr_band->Draw("2 same");
+    hthy->Draw("hist same");
+  }
+  hmc->Draw("hist same");
+  hmc->Draw("P E1 same");
+
+  TLatex lat;
+  lat.SetNDC(); lat.SetTextFont(42); lat.SetTextSize(0.043); lat.SetTextAlign(11);
+  lat.DrawLatex(0.15, 0.925, panel_title.c_str());
+  lat.SetTextSize(0.037);
+  lat.DrawLatex(0.15, 0.865, ("#bf{" + obs_root_label(obs) + "}").c_str());
+
+  TLegend* leg = new TLegend(0.55, 0.68, 0.965, 0.88);
+  leg->SetBorderSize(0); leg->SetFillStyle(0); leg->SetTextFont(42); leg->SetTextSize(0.033);
+  leg->AddEntry(hmc, sample_label.c_str(), "lep");
+  if (theory) {
+    leg->AddEntry(hthy, "Theory LO", "l");
+    leg->AddEntry(hthy_band, "Theory LO unc.", "f");
+  }
+  leg->Draw();
+
+  CoeffSummary cm = coefficient_from_chunk(obs, mc);
+  CoeffSummary ct;
+  if (theory) ct = coefficient_from_chunk(obs, *theory);
+  if (cm.ok || ct.ok) {
+    TPaveText* coeffBox = new TPaveText(0.15, 0.68, 0.52, 0.84, "NDC");
+    coeffBox->SetFillColor(0); coeffBox->SetFillStyle(0); coeffBox->SetBorderSize(1);
+    coeffBox->SetTextFont(42); coeffBox->SetTextAlign(12); coeffBox->SetTextSize(0.027);
+    const std::string lab = obs_root_label(obs);
+    if (cm.ok) coeffBox->AddText(Form("%s [MC] = %.4f #pm %.4f", lab.c_str(), cm.coeff, cm.coeff_err));
+    if (ct.ok) {
+      const double terr = (theory_coeff_err_override >= 0.0) ? theory_coeff_err_override : ct.coeff_err;
+      coeffBox->AddText(Form("%s [Theory LO] = %.4f #pm %.4f", lab.c_str(), ct.coeff, terr));
+    }
+    coeffBox->Draw("same");
+  }
+
+  bot->cd();
+  TH1D* hratio = new TH1D(("hratio_" + unique).c_str(), "", nb, xedges.data());
+  TH1D* hratio_band = new TH1D(("hratio_band_" + unique).c_str(), "", nb, xedges.data());
+  for (int i=1; i<=nb; ++i) {
+    const double m = hmc->GetBinContent(i);
+    const double em = hmc->GetBinError(i);
+    const double den = theory ? hthy->GetBinContent(i) : 0.0;
+    const double eden = theory ? hthy_band->GetBinError(i) : 0.0;
+    if (std::abs(den) > 1e-15) {
+      hratio->SetBinContent(i, m / den);
+      hratio->SetBinError(i, em / std::abs(den));
+      hratio_band->SetBinContent(i, 1.0);
+      hratio_band->SetBinError(i, eden / std::abs(den));
+    }
+  }
+  hratio->SetMarkerStyle(20); hratio->SetMarkerSize(0.85); hratio->SetMarkerColor(blue); hratio->SetLineColor(blue);
+  hratio->GetYaxis()->SetTitle("MC/Theory");
+  hratio->GetYaxis()->SetTitleSize(0.095); hratio->GetYaxis()->SetTitleOffset(0.55);
+  hratio->GetYaxis()->SetLabelSize(0.075); hratio->GetYaxis()->SetNdivisions(505);
+  hratio->GetXaxis()->SetTitle(obs_root_label(obs).c_str());
+  hratio->GetXaxis()->SetTitleSize(0.105); hratio->GetXaxis()->SetLabelSize(0.085);
+  hratio->SetMinimum(0.55); hratio->SetMaximum(1.45);
+  hratio->Draw("AXIS");
+  if (theory) {
+    TGraphAsymmErrors* gr_ratio_band = new TGraphAsymmErrors(make_theory_band_graph(*hratio_band, *hratio_band, "gr_ratio_band_" + unique));
+    gr_ratio_band->SetFillColorAlpha(red, 0.30); gr_ratio_band->SetFillStyle(1001);
+    gr_ratio_band->SetLineColor(red); gr_ratio_band->SetLineWidth(0); gr_ratio_band->SetMarkerSize(0);
+    gr_ratio_band->Draw("2 same");
+  }
+  // Ratio panel: draw a blue step line plus markers/error bars.
+  hratio->Draw("hist same");
+  hratio->Draw("P E1 same");
+  TLine* line = new TLine(xedges.front(), 1.0, xedges.back(), 1.0);
+  line->SetLineStyle(2); line->SetLineColor(kGray+2); line->Draw();
+}
+
+void save_preul_vs_alex_19obs_canvas(const std::string& outbase,
+                                     const std::string& wc,
+                                     int val,
+                                     const std::string& obs,
+                                     const HistChunk1D& preul_mc,
+                                     const HistChunk1D& alex_mc,
+                                     const TheoryTable& theory,
+                                     const std::string& theory_order) {
+  const std::string op = theory_op_from_wc(wc);
+  const std::string tkey = theory_obs_key(obs);
+  HistChunk1D preul_theory, alex_theory;
+  HistChunk1D* preul_theory_ptr = nullptr;
+  HistChunk1D* alex_theory_ptr = nullptr;
+  double theory_coeff_err = -1.0;
+
+  if (!tkey.empty()) {
+    try {
+      const double coeff = theory_value(theory, theory_order, op, tkey, (double)val);
+      theory_coeff_err = theory_value_error(theory, theory_order, op, tkey, (double)val);
+      preul_theory = theory_asymmetry_hist_from_reference(preul_mc, obs, coeff);
+      alex_theory  = theory_asymmetry_hist_from_reference(alex_mc,  obs, coeff);
+      preul_theory_ptr = &preul_theory;
+      alex_theory_ptr  = &alex_theory;
+    } catch (const std::exception& e) {
+      std::cout << "[WARN compare19] no theory for " << wc << "=" << val << " " << obs
+                << ": " << e.what() << std::endl;
+    }
+  }
+
+  TCanvas c(("c_compare19_" + obs + "_" + wc + "_" + std::to_string(val)).c_str(),
+            ("c_compare19_" + obs + "_" + wc + "_" + std::to_string(val)).c_str(),
+            1700, 760);
+  gStyle->SetOptStat(0);
+  c.Divide(2,1,0.005,0.005);
+
+  TPad* left = (TPad*)c.cd(1);
+  draw_mc_vs_theory_halfpad(left, "preul_" + obs + "_" + wc + "_" + std::to_string(val),
+                            obs, preul_mc, preul_theory_ptr,
+                            Form("preUL Dim6Top, %s=%+d", wc.c_str(), val),
+                            "preUL Dim6Top", theory_coeff_err);
+  TPad* right = (TPad*)c.cd(2);
+  draw_mc_vs_theory_halfpad(right, "alex_" + obs + "_" + wc + "_" + std::to_string(val),
+                            obs, alex_mc, alex_theory_ptr,
+                            Form("newSMEFTsim_dilepton, %s=%+d", wc.c_str(), val),
+                            "newSMEFTsim_dilepton", theory_coeff_err);
+
+  c.cd();
+  TLatex lat;
+  lat.SetNDC(); lat.SetTextFont(42); lat.SetTextSize(0.028); lat.SetTextAlign(11);
+  lat.DrawLatex(0.018, 0.982, "#bf{CMS} #it{Simulation Work in Progress}");
+  lat.SetTextAlign(31);
+  lat.DrawLatex(0.982, 0.982, "138 fb^{-1} (13 TeV)");
+
+  c.SaveAs((outbase + ".png").c_str());
+  c.SaveAs((outbase + ".pdf").c_str());
+  std::cout << "[SAVED compare19] " << outbase << ".png/.pdf" << std::endl;
+}
+
+void make_preul_vs_alex_19obs_comparison_root(const std::string& preul_pattern,
+                                              const std::string& alex_pattern,
+                                              const std::string& outdir,
+                                              const TheoryTable& theory,
+                                              const std::string& theory_order = "LO") {
+  const std::string wc = getenv_str("COMPARE_WC", "ctGRe");
+  const std::vector<int> vals = parse_compare_vals_env("COMPARE_VALS", {-2, 0, 2});
+  const std::vector<std::string> obs19 = {
+    "gen_b1k", "gen_b2k", "gen_b1r", "gen_b2r", "gen_b1n", "gen_b2n",
+    "gen_b1j", "gen_b2j", "gen_b1q", "gen_b2q",
+    "gen_c_kk", "gen_c_rr", "gen_c_nn",
+    "gen_c_Prk", "gen_c_Mrk", "gen_c_Pnr", "gen_c_Mnr", "gen_c_Pnk", "gen_c_Mnk"
+  };
+
+  const std::string od = outdir + "/compare19_preUL_vs_ttbbllnunu_Alex_test_" + theory_order;
+  gSystem->mkdir(od.c_str(), true);
+
+  for (int val : vals) {
+    const std::string preul_path = make_template_path(preul_pattern, wc, val);
+    const std::string alex_path  = make_template_path(alex_pattern,  wc, val);
+    try {
+      auto preul_chunks = load_hist_chunks_from_root(preul_path);
+      auto alex_chunks  = load_hist_chunks_from_root(alex_path);
+      for (const std::string& obs : obs19) {
+        if (!preul_chunks.count(obs)) {
+          std::cout << "[WARN compare19] missing " << obs << " in preUL file " << preul_path << std::endl;
+          continue;
+        }
+        if (!alex_chunks.count(obs)) {
+          std::cout << "[WARN compare19] missing " << obs << " in Alex file " << alex_path << std::endl;
+          continue;
+        }
+        const std::string outbase = od + "/" + obs + "_" + wc + "_" + oldvalstr(val) + "_preUL_vs_Alex_" + theory_order;
+        save_preul_vs_alex_19obs_canvas(outbase, wc, val, obs,
+                                        preul_chunks.at(obs), alex_chunks.at(obs),
+                                        theory, theory_order);
+      }
+    } catch (const std::exception& e) {
+      std::cout << "[WARN compare19] skip " << wc << "=" << val << ": " << e.what() << std::endl;
+      std::cout << "                preUL=" << preul_path << std::endl;
+      std::cout << "                Alex =" << alex_path << std::endl;
+    }
+  }
+}
+
 void make_individual_distribution_plots_and_coefficients_root(const std::string& data_root,
                                                               const std::string& eft_template_pattern,
                                                               const std::string& wc,
@@ -3562,10 +3899,10 @@ int main() {
   //   NLO_CTG_MODE=old22 ./execMacro.sh ...       # force old/preUL 22-observable mode
   //   DATA_ROOT=... EFT_PATTERN=... COV_STAT=... COV_SYST=... OUTDIR=...
   std::string data_root = getenv_str("DATA_ROOT",
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_data.root");
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_Alex_test/concatenated_histograms_data.root");
 
   std::string eft_template_pattern = getenv_str("EFT_PATTERN",
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_{wc}_{val}.root");
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_Alex_test/concatenated_histograms_{wc}_{val}.root");
 
   std::string cov_stat = getenv_str("COV_STAT",
     "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/gigantic_matrices/stat_gigantic_matrix_fullRun2.root");
@@ -3607,7 +3944,7 @@ int main() {
   const bool use_old19_basis = (mode_old22_preUL || mode_old22_UL);
 
   const std::string ul_dim6top_pattern =
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_dim6top_test/concatenated_histograms_{wc}_{val}.root";
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_Alex_test/concatenated_histograms_{wc}_{val}.root";
   const std::string preul_ctg_pattern =
     "nlo_ctG_root_density/nlo_ctG_{oldval}_nominal_toppt_default_shape_concatenated.root";
 
@@ -3690,6 +4027,16 @@ int main() {
   {
     std::ofstream theory_dump(outdir + "/theory_coefficients_embedded.csv");
     theory_dump << EMBEDDED_THEORY_CSV;
+  }
+
+
+  // Produce the requested 19-observable side-by-side comparison:
+  //   left  = old/preUL ctG Dim6Top template vs Theory LO
+  //   right = ttbbllnunu_Alex_test template vs Theory LO
+  // Enabled by default; set MAKE_ALEX_PREUL_COMPARE=0 to skip.
+  if (have_theory && getenv_bool_local("MAKE_ALEX_PREUL_COMPARE", true)) {
+    make_preul_vs_alex_19obs_comparison_root(preul_ctg_pattern, ul_dim6top_pattern,
+                                             outdir, theory_table, "LO");
   }
 
   TMatrixD cov_full = load_covariance(cov_stat, cov_syst);

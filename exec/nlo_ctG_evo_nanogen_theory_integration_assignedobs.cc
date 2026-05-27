@@ -1,3 +1,5 @@
+// ./execMacro.sh nlo_ctG_evo_nanogen_theory_integration_assignedobs.cc
+
 // -----------------------------------------------------------------------------
 // Example: how the per-bin theory histogram is constructed for gen_c_kk
 // at ctG = 2.0 using the inclusive SMEFT theory coefficients.
@@ -1276,7 +1278,7 @@ void save_summary_plot(const std::vector<SummaryEntry>& entries,
   const char* pubLabel = isWilsonSummary ? "TOP-22-006 (1#sigma)" : "TOP-18-006 (68% CL)";
   if (!pub_entries.empty()) leg.AddEntry(&dummyPub, pubLabel, "lep");
 
-  std::string fitLabel = "SMEFTsim MC";
+  std::string fitLabel = "Dim6Top MC";
   if (isTheoryLO)  fitLabel = "Theory LO";
   if (isTheoryNLO) fitLabel = "Theory NLO";
   fitLabel += " (68% CL)";
@@ -2429,7 +2431,7 @@ void save_individual_distribution_plot(const std::string& outpng,
   TLegend leg(0.66, 0.70, 0.965, 0.88);
   leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextFont(42); leg.SetTextSize(0.034);
   leg.AddEntry(&hdata, "Data", "lep");
-  leg.AddEntry(&heft, "SMEFTsim MC", "l");
+  leg.AddEntry(&heft, "Dim6Top MC", "l");
   std::string theoryLegend = "Theory ref";
   if (title.find("Theory LO") != std::string::npos) theoryLegend = "Theory LO";
   if (title.find("Theory NLO") != std::string::npos) theoryLegend = "Theory NLO";
@@ -3185,10 +3187,10 @@ void run_theory_fit_suite(const std::string& order,
 
 int main() {
   const std::string data_root =
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output/concatenated_histograms_data.root";
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_newSMEFT_dilepton_lhecoeff/concatenated_histograms_mc.root";
 
   const std::string eft_template_pattern =
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output/concatenated_histograms_{wc}_{val}.root";
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_newSMEFT_dilepton_lhecoeff/concatenated_histograms_{wc}_{val}.root";
 
   // const std::string cov_stat =
   //   "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/stat_gigantic_matrix_fullRun2.root";
@@ -3208,7 +3210,7 @@ int main() {
   const int scan_n = 10000;
   const int scan2d_n = 121;
 
-  const std::string outdir = "nanogen_fits_root_central_SMEFTsim";
+  const std::string outdir = "nanogen_fits_root_smeftsim_newSMEFT_dilepton_lhecoeff";
   gSystem->mkdir(outdir.c_str(), true);
 
   TheoryTable theory_table = load_embedded_theory_csv();
