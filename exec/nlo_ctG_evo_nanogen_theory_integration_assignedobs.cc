@@ -2105,7 +2105,11 @@ std::map<std::string, HistChunk1D> split_values_into_chunks(const std::vector<do
   return out;
 }
 
-std::map<std::string, HistChunk1D> load_hist_chunks_from_root(const std::string& path) {
+std::vector<double> obs_axis_edges(const std::string& obs);
+
+std::map<std::string, HistChunk1D> load_hist_chunks_from_root(const std::string& path,
+                                                       bool print_mc_error_debug = false,
+                                                       const std::string& err_tag = "") {
   TFile f(path.c_str(), "READ");
   if (f.IsZombie()) throw std::runtime_error("Cannot open " + path);
 
@@ -2116,14 +2120,95 @@ std::map<std::string, HistChunk1D> load_hist_chunks_from_root(const std::string&
   const auto names = observable_names();
   const int nobs = std::min((int)names.size(), h->GetNbinsX() / BINS_PER_OBS);
 
+  // IMPORTANT:
+  // The concatenation script writes a hist.storage.Weight() histogram, i.e. each
+  // flattened bin stores both "value" and "variance".  When ROOT reads this back
+  // as a TH1, h->GetBinContent(gbin) is the normalized density value and
+  // h->GetBinError(gbin) should be sqrt(saved variance).  Do NOT reconstruct the
+  // MC errors from GetEntries(): after uproot/hist export, Entries is not a
+  // reliable per-observable event count for this flattened density histogram.
+  // If the printed errors below are not consistent with the generated-event count, then the
+  // problem is upstream in concatenate_histograms.py or in the ROOT writing step.
+
+  const double entries_total = h->GetEntries();
+  const int sumw2_n = h->GetSumw2N();
+
   for (int iobs = 0; iobs < nobs; ++iobs) {
+    const std::string& obs = names[iobs];
     HistChunk1D c;
+    std::vector<double> edges = obs_axis_edges(obs);
+
+    double integral_density = 0.0;
+    double sum_var_density = 0.0;
+    double min_err = 1e300;
+    double max_err = 0.0;
+    double neff_sum = 0.0;
+    int neff_n = 0;
+
     for (int ib = 0; ib < BINS_PER_OBS; ++ib) {
       const int gbin = iobs * BINS_PER_OBS + ib + 1;
-      c.y.push_back(h->GetBinContent(gbin));
-      c.e.push_back(std::max(0.0, h->GetBinError(gbin)));
+      const double y = h->GetBinContent(gbin);
+      const double e = std::max(0.0, h->GetBinError(gbin));
+      const double dx = (edges.size() == BINS_PER_OBS + 1) ? std::abs(edges[ib+1] - edges[ib]) : 1.0;
+
+      c.y.push_back(y);
+      c.e.push_back(e);
+
+      integral_density += y * dx;
+      sum_var_density += e * e;
+      min_err = std::min(min_err, e);
+      max_err = std::max(max_err, e);
+
+      // Back-calculate an approximate multinomial N_eff from the saved density
+      // error: p_i = y_i * dx, sigma(p_i) = e_i * dx,
+      // sigma^2(p_i) ~= p_i(1-p_i)/N_eff.
+      const double pbin = y * dx;
+      const double ep = e * dx;
+      if (pbin > 0.0 && pbin < 1.0 && ep > 0.0) {
+        neff_sum += pbin * (1.0 - pbin) / (ep * ep);
+        ++neff_n;
+      }
     }
-    out[names[iobs]] = c;
+
+    if (print_mc_error_debug &&
+        (obs == "gen_b1k" || obs == "gen_c_kk" || obs == "gen_ll_cHel")) {
+      std::cout << std::scientific << std::setprecision(6)
+                << "[EFTMC-ERR-READBACK] tag=" << err_tag
+                << " obs=" << obs
+                << " path=" << path
+                << " entries_total=" << entries_total
+                << " sumw2N=" << sumw2_n
+                << " density_integral=" << integral_density
+                << " min_bin_err=" << min_err
+                << " max_bin_err=" << max_err
+                << " rms_bin_err=" << std::sqrt(sum_var_density / std::max(1, BINS_PER_OBS));
+      if (neff_n > 0) {
+        std::cout << " approx_Neff_from_errors=" << (neff_sum / double(neff_n));
+      }
+      std::cout << std::endl;
+
+      for (int ib = 0; ib < BINS_PER_OBS; ++ib) {
+        const double dx = (edges.size() == BINS_PER_OBS + 1) ? std::abs(edges[ib+1] - edges[ib]) : 1.0;
+        const double pbin = c.y[ib] * dx;
+        const double ep = c.e[ib] * dx;
+        double neff_bin = -1.0;
+        if (pbin > 0.0 && pbin < 1.0 && ep > 0.0) {
+          neff_bin = pbin * (1.0 - pbin) / (ep * ep);
+        }
+        std::cout << std::scientific << std::setprecision(6)
+                  << "[EFTMC-ERR-BIN] tag=" << err_tag
+                  << " obs=" << obs
+                  << " ib=" << ib
+                  << " y_density=" << c.y[ib]
+                  << " err_density=" << c.e[ib]
+                  << " p_width=" << pbin
+                  << " err_p_width=" << ep
+                  << " approx_Neff=" << neff_bin
+                  << std::endl;
+      }
+    }
+
+    out[obs] = c;
   }
   return out;
 }
@@ -2132,9 +2217,29 @@ CoeffSummary coefficient_from_chunk(const std::string& obs, const HistChunk1D& c
   CoeffSummary s;
   const double f = asymmetry_factor(obs);
   if (f == 0.0 || c.y.size() != BINS_PER_OBS) return s;
+
+  // Histograms are normalized differential densities.  For an asymmetry we
+  // must integrate density over bin width first:
+  //   p_i = density_i * width_i
+  //   sigma(p_i) = sigma(density_i) * width_i
+  // The old implementation summed raw density values directly.  For equal-width
+  // bins the central AFB accidentally cancels the common width, but the stored
+  // errors and any non-uniform binning should be propagated in probability space.
+  std::vector<double> edges = obs_axis_edges(obs);
   double F = 0.0, B = 0.0, vF = 0.0, vB = 0.0;
-  for (int i = 0; i < BINS_PER_OBS / 2; ++i) { B += c.y[i]; vB += c.e[i] * c.e[i]; }
-  for (int i = BINS_PER_OBS / 2; i < BINS_PER_OBS; ++i) { F += c.y[i]; vF += c.e[i] * c.e[i]; }
+  for (int i = 0; i < BINS_PER_OBS; ++i) {
+    const double dx = (edges.size() == BINS_PER_OBS + 1) ? std::abs(edges[i+1] - edges[i]) : 1.0;
+    const double pbin = c.y[i] * dx;
+    const double epbin = c.e[i] * dx;
+    if (i < BINS_PER_OBS / 2) {
+      B += pbin;
+      vB += epbin * epbin;
+    } else {
+      F += pbin;
+      vF += epbin * epbin;
+    }
+  }
+
   if (std::abs(F + B) < 1e-15) return s;
   s.afb = (F - B) / (F + B);
   s.afb_err = (2.0 / ((F + B) * (F + B))) * std::sqrt(std::max(0.0, B * B * vF + F * F * vB));
@@ -2615,7 +2720,7 @@ void make_concatenated_inspection_plot_root(const std::string& data_root,
     const int v = vals[iv];
     const std::string path = make_template_path(eft_template_pattern, wc, v);
     try {
-      auto mc_chunks = load_hist_chunks_from_root(path);
+      auto mc_chunks = load_hist_chunks_from_root(path, true, "fit-mc");
       const std::vector<double> mc_y = flatten_chunks_in_observable_order(mc_chunks, false);
       const std::vector<double> mc_e = flatten_chunks_in_observable_order(mc_chunks, true);
       TH1D* hm = new TH1D(Form("hmc_concat_%s_%d", wc.c_str(), v), "", nbins, 0.0, (double)nbins);
@@ -2785,7 +2890,7 @@ void make_individual_distribution_plots_and_coefficients_root(const std::string&
   for (int v : vals) {
     std::string path = make_template_path(eft_template_pattern, wc, v);
     try {
-      auto eft_chunks = load_hist_chunks_from_root(path);
+      auto eft_chunks = load_hist_chunks_from_root(path, true, "plot-eft");
       for (const auto& kv : data_chunks) {
         const std::string& obs = kv.first;
         if (!eft_chunks.count(obs)) continue;
@@ -3186,11 +3291,30 @@ void run_theory_fit_suite(const std::string& order,
 
 
 int main() {
-  const std::string data_root =
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_newSMEFT_dilepton_lhecoeff/concatenated_histograms_mc.root";
+  // IMPORTANT:
+  // This must be the unfolded DATA reference, not the MC/Nominal template.
+  // The previous version accidentally pointed data_root to concatenated_histograms_mc.root,
+  // so the black "Data" points and coefficient errors were actually MC-stat errors.
+  // You can override this at runtime with:
+  //   DATA_ROOT=/path/to/concatenated_histograms_data.root ./execMacro.sh ...
+  const char* env_data_root = std::getenv("DATA_ROOT");
+  const std::string data_root = (env_data_root && std::string(env_data_root).size())
+    ? std::string(env_data_root)
+    : std::string("/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_run0_test/concatenated_histograms_data.root");
+
+  if (data_root.find("concatenated_histograms_mc.root") != std::string::npos ||
+      data_root.find("concatenated_histograms_Nominal.root") != std::string::npos) {
+    std::cerr << "[FATAL] DATA_ROOT points to an MC/Nominal template, not unfolded data: "
+              << data_root << std::endl;
+    std::cerr << "        Build/use concatenated_histograms_data.root from the gigantic-matrix central values "
+              << "or set DATA_ROOT explicitly." << std::endl;
+    return 2;
+  }
+
+  std::cout << "[INPUT] DATA_ROOT = " << data_root << std::endl;
 
   const std::string eft_template_pattern =
-    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_newSMEFT_dilepton_lhecoeff/concatenated_histograms_{wc}_{val}.root";
+    "/depot/cms/top/he614/notebooks/EFT_FullRun2/histogram_output_nanogen_ttbbllnunu_run0_test/concatenated_histograms_{wc}_{val}.root";
 
   // const std::string cov_stat =
   //   "/depot/cms/top/dawoodo/fullRun2_UL_September2024_unfolding/CMSSW_10_6_30/src/TopAnalysis/Configuration/analysis/diLeptonic/stat_gigantic_matrix_fullRun2.root";
@@ -3210,7 +3334,7 @@ int main() {
   const int scan_n = 10000;
   const int scan2d_n = 121;
 
-  const std::string outdir = "nanogen_fits_root_smeftsim_newSMEFT_dilepton_lhecoeff";
+  const std::string outdir = "nanogen_fits_root_ttbbllnunu_run0_test";
   gSystem->mkdir(outdir.c_str(), true);
 
   TheoryTable theory_table = load_embedded_theory_csv();
